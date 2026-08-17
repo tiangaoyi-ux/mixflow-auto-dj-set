@@ -1,0 +1,2751 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIXFLOW · Auto DJ Set</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0a0b10; --panel:#12141d; --panel2:#171a26; --line:#232738;
+    --txt:#e8eaf2; --dim:#8a90a6; --cyan:#00e5ff; --mag:#ff2d95; --amber:#ffb020;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,"PingFang SC","Segoe UI",Roboto,sans-serif;min-height:100vh}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(900px 400px at 15% -10%,rgba(0,229,255,.08),transparent 60%),
+               radial-gradient(900px 400px at 90% -10%,rgba(255,45,149,.07),transparent 60%)}
+  .wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;padding:22px 20px 60px}
+
+  header{display:flex;align-items:center;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+  .logo{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:3px;
+    background:linear-gradient(90deg,var(--cyan),var(--mag));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:var(--dim);font-size:12px;letter-spacing:1px}
+  #spectrum{margin-left:auto;width:180px;height:36px;opacity:.9}
+
+  .grid{display:grid;grid-template-columns:1fr 300px;gap:18px;margin-top:20px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .ptitle{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .ptitle::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+
+  /* steps */
+  #steps{display:flex;align-items:center;gap:10px;margin-top:14px;font-family:var(--mono);font-size:11px;letter-spacing:1px}
+  #steps .step{color:#3f4560;padding:5px 12px;border:1px solid var(--line);border-radius:20px;transition:.3s}
+  #steps .step.on{color:var(--cyan);border-color:var(--cyan);box-shadow:0 0 12px rgba(0,229,255,.2)}
+  #steps .arrow{color:#2c3350}
+  /* 推荐排序提示条 */
+  #recobar{display:none;margin-top:12px;padding:9px 12px;border:1px dashed rgba(255,176,32,.45);border-radius:9px;
+    font-size:11px;line-height:1.6;color:var(--amber);background:rgba(255,176,32,.05)}
+  #recobar.ok{border-color:rgba(0,229,255,.4);color:var(--cyan);background:rgba(0,229,255,.05)}
+  /* 歌曲衔接指示 */
+  .link{display:flex;align-items:center;gap:10px;padding:0 14px;font-family:var(--mono);font-size:9px;letter-spacing:.5px;color:#4a5170}
+  .link i{flex:1;height:1px;background:var(--line)}
+  .link .good{color:#3ddc84}
+  .link .bad{color:var(--mag)}
+
+  /* dropzone */
+  #dropzone{border:1.5px dashed #2c3350;border-radius:12px;padding:26px;text-align:center;cursor:pointer;transition:.2s;color:var(--dim)}
+  #dropzone:hover,#dropzone.over{border-color:var(--cyan);color:var(--txt);background:rgba(0,229,255,.04)}
+  #dropzone b{color:var(--txt)}
+  #dropzone .sub{font-size:12px;margin-top:6px}
+  #demoBtn{margin-top:12px;background:none;border:1px solid var(--line);color:var(--dim);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px}
+  #demoBtn:hover{color:var(--cyan);border-color:var(--cyan)}
+  #decoding{display:none;margin-top:10px;font-family:var(--mono);font-size:12px;color:var(--amber)}
+
+  /* playlist */
+  #list{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .track{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:10px 12px;cursor:grab;transition:border-color .15s, box-shadow .15s}
+  .track.dragging{opacity:.4}
+  .track.playing-now{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 0 18px rgba(0,229,255,.15)}
+  .track .grip{color:#3a4160;font-size:15px;letter-spacing:-2px;user-select:none}
+  .track .idx{font-family:var(--mono);font-size:12px;color:var(--dim);width:22px;text-align:right}
+  .wavewrap{position:relative;width:120px;height:34px;flex:none;cursor:crosshair}
+  .wavewrap canvas{display:block;width:100%;height:100%}
+  .secstrip{position:absolute;left:0;right:0;bottom:0;height:5px;display:flex;border-radius:2px;overflow:hidden;z-index:1}
+  .secstrip i{display:block;height:100%;opacity:.85}
+  .wcur{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.85);display:none;pointer-events:none;z-index:2}
+  .wprog{position:absolute;top:0;bottom:0;width:2px;background:var(--cyan);box-shadow:0 0 6px var(--cyan);left:0;display:none;pointer-events:none}
+  .track .meta{flex:1;min-width:0}
+  .track .name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .track .dur{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;
+    border:1px solid var(--line);background:#1a1e2c;color:var(--dim);cursor:pointer;flex:none;transition:.15s}
+  .chip:hover:not(:disabled){border-color:var(--cyan)}
+  .chipedit{width:56px;font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:6px;
+    border:1px solid var(--cyan);background:#0d0f17;color:var(--txt);outline:none}
+  #sortBtn{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:5px 12px;border-radius:7px;
+    cursor:pointer;color:var(--amber);background:rgba(255,176,32,.06);border:1px solid rgba(255,176,32,.4);transition:.2s}
+  #sortBtn:hover:not(:disabled){background:rgba(255,176,32,.15);box-shadow:0 0 14px rgba(255,176,32,.25)}
+  #sortBtn:disabled{opacity:.3;cursor:not-allowed}
+  .tog{display:flex;align-items:flex-start;gap:8px;margin-top:16px;font-size:12px;color:var(--dim);cursor:pointer;line-height:1.5}
+  .tog input{accent-color:var(--cyan);margin-top:2px;cursor:pointer}
+  .selLabel{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--dim);margin-top:18px}
+  #mixMode{width:100%;margin-top:8px;background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:9px 10px;font-size:12px;outline:none;cursor:pointer}
+  #mixMode:focus{border-color:var(--cyan)}
+  .track .pv{background:none;border:1px solid var(--line);color:var(--dim);cursor:pointer;width:30px;height:30px;border-radius:50%;font-size:11px;flex:none;transition:.15s}
+  .track .pv:hover,.track .pv.on{color:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px rgba(0,229,255,.25)}
+  .track .rm{background:none;border:none;color:#4a5170;cursor:pointer;font-size:16px;padding:4px}
+  .track .rm:hover{color:var(--mag)}
+  #emptyHint{color:#3f4560;text-align:center;font-size:12px;padding:16px 0;display:none}
+
+  /* controls */
+  .ctrl label{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:8px;font-family:var(--mono)}
+  .ctrl label span b{color:var(--cyan)}
+  input[type=range]{width:100%;accent-color:var(--cyan);cursor:pointer}
+  #genBtn{width:100%;margin-top:18px;padding:14px;border:none;border-radius:10px;cursor:pointer;
+    font-size:14px;font-weight:700;letter-spacing:2px;font-family:var(--mono);color:#06070c;
+    background:linear-gradient(90deg,var(--cyan),var(--mag));transition:.2s}
+  #genBtn:disabled{opacity:.25;cursor:not-allowed}
+  #genBtn:not(:disabled):hover{box-shadow:0 0 24px rgba(0,229,255,.35);transform:translateY(-1px)}
+  .hint{font-size:11px;color:#4a5170;margin-top:10px;line-height:1.6}
+  #genNote{font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:10px;line-height:1.6;min-height:0}
+  #genNote:empty{display:none}
+
+  /* deck */
+  #deck{display:none;margin-top:18px}
+  .transport{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .tbtn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt);font-size:16px;cursor:pointer;transition:.15s}
+  .tbtn:hover{border-color:var(--cyan);color:var(--cyan)}
+  #playBtn{background:linear-gradient(135deg,rgba(0,229,255,.15),rgba(255,45,149,.15));border-color:#2c3350}
+  .now{min-width:0;flex:1}
+  .now .status{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--dim)}
+  .now .status.transition{color:var(--amber);text-shadow:0 0 10px rgba(255,176,32,.5)}
+  .now .title{font-size:16px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .clock{font-family:var(--mono);font-size:14px;color:var(--dim)}
+  .clock b{color:var(--txt);font-weight:600}
+  #expBtn{font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:10px 16px;border-radius:9px;cursor:pointer;
+    color:var(--cyan);background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.4);transition:.2s}
+  #expBtn:hover:not(:disabled){background:rgba(0,229,255,.15);box-shadow:0 0 16px rgba(0,229,255,.25)}
+  #expBtn:disabled{opacity:.45;cursor:wait;color:var(--amber);border-color:rgba(255,176,32,.4)}
+
+  #timeline{position:relative;margin-top:10px;height:230px;background:#0d0f17;border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;cursor:ew-resize}
+  #tlCv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .lane-label{position:absolute;left:8px;font-family:var(--mono);font-size:9px;letter-spacing:2px;color:#3a4160;z-index:3}
+  /* 对齐检查器 */
+  .insbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:8px}
+  #insSel{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;outline:none}
+  .insbtn{background:var(--panel2);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:11px}
+  .insbtn:hover{color:var(--cyan);border-color:var(--cyan)}
+  #insSpan{min-width:78px;text-align:center;color:var(--txt)}
+  #insInfo{margin-left:auto;color:var(--amber)}
+  #insDiag{font-family:var(--mono);font-size:10px;line-height:1.7;margin-bottom:8px;padding:8px 10px;border-radius:8px;
+    background:#0f1119;border:1px solid var(--line);white-space:pre-wrap}
+  #insDiag .ok{color:#3ddc84} #insDiag .bad{color:var(--mag)} #insDiag .warn{color:var(--amber)}
+  .inshint{font-size:10px;color:#4a5170;margin-top:7px;line-height:1.6}
+  #secLegend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--dim)}
+  #secLegend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:-1px;opacity:.8}
+    text-shadow:0 1px 3px #000;white-space:nowrap;overflow:hidden;max-width:92%;z-index:2}
+  .tl-cf{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(-55deg,rgba(255,176,32,.16) 0 5px,transparent 5px 10px);
+    border-left:1px dashed rgba(255,176,32,.6);border-right:1px dashed rgba(255,176,32,.6);z-index:2;pointer-events:none}
+  .tl-cf::after{content:"CROSSFADE";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-90deg);
+    font-family:var(--mono);font-size:8px;letter-spacing:1px;color:rgba(255,176,32,.85);white-space:nowrap}
+  #playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 10px var(--cyan);z-index:4;left:0;
+    transition:none;pointer-events:none}
+  #playhead::before{content:"";position:absolute;top:-1px;left:-4px;border:5px solid transparent;border-top-color:#fff}
+  #timeline{cursor:crosshair}
+  #tlcur{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.5);display:none;z-index:5;pointer-events:none}
+  #tltime{position:absolute;top:3px;transform:translateX(-50%);font-family:var(--mono);font-size:9px;color:#fff;
+    background:rgba(0,0,0,.65);padding:1px 5px;border-radius:4px;display:none;z-index:6;pointer-events:none;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="logo">MIXFLOW</div>
+      <div class="tag">PLAYLIST → SEAMLESS DJ SET · PROTOTYPE</div>
+      <div class="tag" id="engineTag" style="margin-top:2px">ENGINE: 加载中…</div>
+    </div>
+    <canvas id="spectrum" width="180" height="36"></canvas>
+  </header>
+
+  <div id="steps">
+    <span class="step" id="st1">① 上传</span><span class="arrow">→</span>
+    <span class="step" id="st2">② 推荐排序 / 自定义</span><span class="arrow">→</span>
+    <span class="step" id="st3">③ 生成 · 试听 · 导出</span>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="ptitle">TRACK POOL / 歌单<button id="sortBtn" title="BPM 优先排序:相邻 BPM 尽量接近(差 >20 不可 beatmatch),key 兼容作次级偏好">⚡ AUTO SORT</button></div>
+      <div id="dropzone">
+        <div><b>拖入音频文件</b> 或点击选择</div>
+        <div class="sub">支持 mp3 / wav / m4a / ogg · 可多选 · 拖拽卡片调整顺序</div>
+        <button id="demoBtn">没有文件?生成 3 首测试音轨 →</button>
+      </div>
+      <input type="file" id="fileInput" accept="audio/*" multiple hidden>
+      <div id="decoding">DECODING…</div>
+      <div id="recobar"></div>
+      <div id="list"></div>
+      <div id="emptyHint">歌单为空</div>
+    </div>
+
+    <div class="panel ctrl">
+      <div class="ptitle">MIX SETTINGS / 混音设置</div>
+      <div class="selLabel">OVERLAP 过渡长度(小节)</div>
+      <select id="ovlSel">
+        <option value="8">8 小节 · 通用(默认,跨曲风最稳)</option>
+        <option value="16">16 小节 · 长混</option>
+        <option value="32">32 小节 · 超长混(电子乐)</option>
+      </select>
+      <label class="tog"><input type="checkbox" id="bassSwap" checked><span>BASS SWAP · 低频交换:入歌先切掉低频,到 downbeat 再对调 —— 两条 bassline 永不同时存在(跨曲风通用,防浑浊与爆音)</span></label>
+      <label class="tog"><input type="checkbox" id="tempoAlign" checked><span>BPM ALIGN · 过渡前后 8×8 拍内变速对齐到两曲 BPM 中点(time-stretch 保持音调)</span></label>
+      <label class="tog"><input type="checkbox" id="normalize" checked><span>LOUDNESS · 分频段均衡:拆低/中/高三个频段对比全歌单,各频段分别对齐(±8dB),再加整体响度对齐(±12dB,防削波)</span></label>
+      <div class="selLabel">MIX STYLE / 接歌方式(phrase 级,节拍小节对齐)</div>
+      <select id="mixMode">
+        <option value="v15">⓪ v15 经典过渡(默认 · 全程渐变 crossfade,回退版)</option>
+        <option value="outro_intro">① OUTRO ← INTRO · 平台式包络长混</option>
+        <option value="drop_intro">② 末尾 DROP ← INTRO · 入歌 intro 骑在出歌最后的 drop 上</option>
+        <option value="break_drop">③ BREAK ← DROP · 出歌 breakdown 演完,入歌 drop 砸进来</option>
+        <option value="build_drop">④ BUILDUP → DROP · 入歌带完整 buildup 进场,drop 接出歌 drop 尾</option>
+        <option value="drop_drop">⑤ DROP ← DROP · drop 无缝续接(1 小节快速换手)</option>
+      </select>
+      <div class="hint" style="margin-top:6px">出歌锚点强制在 50% 时长之后(保证第一首大部分演奏完)。歌曲缺所需 section 或 DROP 不在后半段时,该过渡自动回退 OUTRO←INTRO;再缺数据回退定时长 crossfade。</div>
+      <button id="beatBtn" style="display:none;width:100%;margin-top:14px;padding:10px;border-radius:9px;cursor:pointer;
+        font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--cyan);
+        background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.4)">⟳ 重建 Essentia 节拍网格(改高精度后点此)</button>
+      <label class="tog"><input type="checkbox" id="beatHQ"><span>高精度节拍(multifeature,融合 5 个跟踪器;更准但明显更慢。改动后需重建网格)</span></label>
+      <button id="genBtn" disabled>✓ 顺序满意 · 生成 DJ SET</button>
+      <div id="genNote"></div>
+      <div class="hint">上传后自动检测 Key(Camelot)与 BPM,点击标签可手动修正。⚡ AUTO SORT 以 <b>BPM 接近为第一准则</b>、key 兼容为次级偏好。<br><b style="color:var(--amber)">单曲变速上限 10 BPM;相邻两曲差 &gt;20 BPM 视为无法 beatmatch,该处退回定时长 crossfade。</b></div>
+    </div>
+  </div>
+
+  <div class="panel" id="deck">
+    <div class="ptitle">LIVE SET / 过渡预览</div>
+    <div class="transport">
+      <button class="tbtn" id="playBtn" title="播放/暂停">⏸</button>
+      <button class="tbtn" id="stopBtn" title="停止">⏹</button>
+      <div class="now">
+        <div class="status" id="status">IDLE</div>
+        <div class="title" id="nowTitle">—</div>
+      </div>
+      <div class="clock"><b id="tCur">00:00</b> / <span id="tTotal">00:00</span></div>
+      <button id="expBtn" title="离线渲染整个 Set 并下载 WAV 文件">⬇ EXPORT WAV</button>
+    </div>
+    <div class="insbar">
+      <button class="insbtn" id="insZoomOut">−</button>
+      <span id="insSpan">全曲</span>
+      <button class="insbtn" id="insZoomIn">+</button>
+      <button class="insbtn" id="insFit">全览</button>
+      <select id="insSel"></select>
+      <button class="insbtn" id="insGo">跳到该过渡</button>
+      <span id="insInfo"></span>
+    </div>
+    <div id="timeline">
+      <canvas id="tlCv"></canvas>
+      <div id="playhead"></div>
+      <div id="tlcur"></div>
+      <div id="tltime"></div>
+    </div>
+    <div id="insDiag"></div>
+    <div id="secLegend"></div>
+    <div class="inshint">滚轮缩放 · 拖动平移 · 放大后显示每一拍击点与过渡点;歌曲块底色 = 该处所属 section<br><b style="color:var(--amber)">预览只播放各个过渡段(每首歌的入场与出场);中间未加工的部分已省略以节省内存,波形上有虚线标注「⋯ 省略 M:SS」。导出 WAV 时会重新渲染完整 set。</b></div>
+    <div style="display:none">
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let ctx = null;
+const tracks = [];               // {id,name,buffer,dur,peaks}
+let schedule = null;             // {items:[{track,start,dur,cfIn,cfOut}], total}
+let playing = false, t0 = 0, sources = [], master = null, analyser = null, raf = 0;
+let uid = 0;
+
+function ensureCtx(){ if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)(); return ctx; }
+const fmt = s => { s=Math.max(0,s|0); return String(s/60|0).padStart(2,"0")+":"+String(s%60).padStart(2,"0"); };
+
+/* ---------- 波形峰值 ---------- */
+function computePeaks(buf, n){
+  const ch = buf.getChannelData(0), step = Math.floor(ch.length/n)||1, peaks = new Float32Array(n);
+  for(let i=0;i<n;i++){
+    let m=0, s=i*step, e=Math.min(s+step, ch.length);
+    for(let j=s;j<e;j+=16){ const v=Math.abs(ch[j]); if(v>m)m=v; }
+    peaks[i]=m;
+  }
+  return peaks;
+}
+function drawWave(canvas, peaks, color, scale=1){
+  const dpr = window.devicePixelRatio||1;
+  const w = canvas.clientWidth||canvas.width, h = canvas.clientHeight||canvas.height;
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  const g = canvas.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,w,h);
+  g.fillStyle = color;
+  const n = peaks.length, bw = w/n;
+  for(let i=0;i<n;i++){
+    const bh = Math.max(1, Math.min(peaks[i]*scale*h*0.9, h));
+    g.fillRect(i*bw, (h-bh)/2, Math.max(bw-1,.6), bh);
+  }
+}
+
+/* ---------- 响度分析与均衡 ----------
+   分块 RMS,取响的那一半块求均值(避开歌曲首尾静音),对齐到 -14dBFS 目标,防削波并限幅 ±12dB */
+function computeLoudnessGain(buf){
+  const ch=buf.getChannelData(0), ch2=buf.numberOfChannels>1? buf.getChannelData(1):null;
+  const block=Math.floor(buf.sampleRate*0.4);
+  const rmss=[]; let peak=0;
+  for(let s=0;s+block<=ch.length;s+=block){
+    let e=0,cnt=0;
+    for(let i=s;i<s+block;i+=4){
+      let v=ch[i]; if(ch2) v=(v+ch2[i])/2;
+      e+=v*v; cnt++;
+      const a=Math.abs(v); if(a>peak) peak=a;
+    }
+    rmss.push(Math.sqrt(e/cnt));
+  }
+  if(!rmss.length) return 1;
+  rmss.sort((a,b)=>b-a);
+  const loud=rmss.slice(0, Math.max(1, Math.floor(rmss.length*0.5)));
+  const rms=loud.reduce((a,b)=>a+b,0)/loud.length;
+  /* 目标 -17dBFS(原 -14dBFS)。过渡中段两轨全音量同奏,电平直接翻倍:
+     实测两轨相加峰值 1.93 → 硬削波(爆音)。降 3dB 留同奏余量,配合主输出限幅器。 */
+  let gain=0.14/Math.max(rms,1e-6);
+  gain=Math.min(gain, 0.7/Math.max(peak,1e-6));  // 防削波(留 3dB 峰值余量)
+  return Math.min(Math.max(gain,0.2),4);         // 限幅约 ±12dB
+}
+function gainOf(t){ return $("normalize").checked? (t.gain||1) : 1; }
+
+/* ---------- 分频段(低/中/高)响度分析与均衡 ----------
+   低 <250Hz / 中 250–4kHz / 高 4k–16kHz。测每首歌三个频段的能量占比,
+   与歌单中位数分布对比,偏强的频段压低、偏弱的提升(±8dB 内),用 3 段 EQ 实时施加 */
+function computeBands(buf){
+  const sr=buf.sampleRate, ch=buf.getChannelData(0);
+  const FR=4096, HOP=16384;
+  const start=Math.floor(Math.max(0,(buf.duration/2-30))*sr);
+  const end=Math.min(ch.length-FR, start+60*sr);
+  if(end<=start) return null;
+  const re=new Float32Array(FR), im=new Float32Array(FR);
+  const win=new Float32Array(FR); for(let i=0;i<FR;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/FR);
+  const e=[1e-12,1e-12,1e-12];
+  for(let p=start;p<end;p+=HOP){
+    for(let i=0;i<FR;i++){ re[i]=ch[p+i]*win[i]; im[i]=0; }
+    fft(re,im);
+    for(let b=1;b<FR/2;b++){
+      const f=b*sr/FR, pw=re[b]*re[b]+im[b]*im[b];
+      if(f<250) e[0]+=pw; else if(f<4000) e[1]+=pw; else if(f<16000) e[2]+=pw;
+    }
+  }
+  return e;
+}
+function bandTargetShares(){ // 当前歌单各频段能量占比的中位数,作为对齐目标
+  const list=tracks.filter(t=>t.bands);
+  if(list.length<2) return null;
+  const med=a=>{ const s=[...a].sort((x,y)=>x-y); return s[(s.length-1)>>1]; };
+  return [0,1,2].map(b=>med(list.map(t=>t.bands[b]/(t.bands[0]+t.bands[1]+t.bands[2]))));
+}
+function bandCorrection(t){ // 返回 [低,中,高] 修正量(dB)
+  if(!$("normalize").checked || !t.bands) return [0,0,0];
+  const ref=bandTargetShares(); if(!ref) return [0,0,0];
+  const s=t.bands[0]+t.bands[1]+t.bands[2];
+  /* 提升上限收紧到 +3dB(原 +8dB):+8dB 叠加同奏后实测峰值达 3.39,必然严重削波。
+     衰减侧保留 -8dB —— 削减不会增加电平,是安全方向。 */
+  return [0,1,2].map(b=>Math.min(3, Math.max(-8, 10*Math.log10(ref[b]/(t.bands[b]/s)))));
+}
+
+/* BASS SWAP 包络:低频在 bassInAt 之前被切掉、bassOutAt 之后再次切掉,中间为 0dB。
+   ramp 用 1 拍完成(真人转 EQ 旋钮的速度),g0=seek 偏移(全局时间)。 */
+const BASS_CUT_DB=-26, BASS_FREQ=150;
+function applyBassEnv(param, it, g0, t0abs, T){
+  if(!$("bassSwap").checked){ param.setValueAtTime(0, t0abs); return; }
+  const beat=T? 60/T : 0.5, ramp=Math.max(0.08, beat);
+  const inAt=it.bassInAt, outAt=it.bassOutAt;
+  const toCtx=gt=>t0abs+Math.max(0, gt-g0);
+  let cur = (inAt!=null && g0<inAt)? BASS_CUT_DB : 0;
+  if(outAt!=null && g0>=outAt+ramp) cur=BASS_CUT_DB;
+  param.setValueAtTime(cur, t0abs);
+  if(inAt!=null && g0<inAt){
+    param.setValueAtTime(BASS_CUT_DB, toCtx(inAt));
+    param.linearRampToValueAtTime(0, toCtx(inAt+ramp));
+  }
+  if(outAt!=null && g0<outAt){
+    param.setValueAtTime(0, toCtx(outAt));
+    param.linearRampToValueAtTime(BASS_CUT_DB, toCtx(outAt+ramp));
+  }
+}
+
+/* 主输出限幅器(播放与导出共用) */
+function makeLimiter(ac){
+  const c=ac.createDynamicsCompressor();
+  c.threshold.value=-1.5; c.knee.value=0; c.ratio.value=20;
+  c.attack.value=0.002;  c.release.value=0.12;
+  const g=ac.createGain(); g.gain.value=0.92;   // 补偿限幅器输出、再留 0.7dB 余量
+  c.connect(g);
+  return {input:c, output:g};
+}
+function makeBandEQ(ac, corr){ // lowshelf + peaking + highshelf 三段链
+  const lo=ac.createBiquadFilter(); lo.type="lowshelf";  lo.frequency.value=250;  lo.gain.value=corr[0];
+  const mi=ac.createBiquadFilter(); mi.type="peaking";   mi.frequency.value=1000; mi.Q.value=0.6; mi.gain.value=corr[1];
+  const hi=ac.createBiquadFilter(); hi.type="highshelf"; hi.frequency.value=4000; hi.gain.value=corr[2];
+  lo.connect(mi); mi.connect(hi);
+  return {input:lo, output:hi};
+}
+
+/* ---------- 上传 / 解码 ---------- */
+const dz = $("dropzone"), fi = $("fileInput");
+dz.addEventListener("click", e => { if(e.target.id!=="demoBtn") fi.click(); });
+fi.addEventListener("change", () => { addFiles([...fi.files]); fi.value=""; });
+dz.addEventListener("dragover", e=>{ e.preventDefault(); dz.classList.add("over"); });
+dz.addEventListener("dragleave", ()=>dz.classList.remove("over"));
+dz.addEventListener("drop", e=>{ e.preventDefault(); dz.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
+
+async function addFiles(files){
+  const ok = files.filter(f=>f.type.startsWith("audio")||/\.(mp3|wav|m4a|ogg|flac|aac)$/i.test(f.name));
+  if(!ok.length) return;
+  $("decoding").style.display="block"; ensureCtx();
+  const added=[];
+  for(const f of ok){
+    try{
+      const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+      const t={ id:++uid, name:f.name.replace(/\.[^.]+$/,""), buffer:buf, dur:buf.duration, peaks:computePeaks(buf,240), gain:computeLoudnessGain(buf), bands:computeBands(buf), analyzing:true, key:null, bpm:null };
+      tracks.push(t); added.push(t);
+    }catch(err){ console.warn("解码失败:", f.name, err); }
+  }
+  $("decoding").style.display="none";
+  renderList();
+  for(let i=0;i<added.length;i++){
+    $("decoding").style.display="block";
+    $("decoding").textContent=`分析中 ${i+1}/${added.length}(Essentia 节拍 + Key + 结构)…`;
+    await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0))); // 先刷新 UI 再进重计算
+    await analyzeTrack(added[i]);
+  }
+  $("decoding").style.display="none"; $("decoding").textContent="DECODING…";
+  maybeAutoSort();
+}
+
+/* ---------- 测试音轨(合成) ---------- */
+$("demoBtn").addEventListener("click", async e=>{
+  e.stopPropagation(); ensureCtx();
+  $("decoding").style.display="block"; $("demoBtn").disabled=true;
+  const specs = [ {name:"Demo 01 · Deep 122", bpm:122, root:110.00, key:"8A"},   // A minor
+                  {name:"Demo 02 · Groove 126", bpm:126, root:130.81, key:"5A"}, // C minor
+                  {name:"Demo 03 · Peak 124", bpm:124, root:98.00, key:"6A"} ];  // G minor
+  const made=[];
+  for(const s of specs){
+    const buf = await synthTrack(s.bpm, s.root, 40);
+    const t={ id:++uid, name:s.name, buffer:buf, dur:buf.duration, peaks:computePeaks(buf,240), gain:computeLoudnessGain(buf), bands:computeBands(buf), key:s.key, bpm:s.bpm, bpmExact:s.bpm, keyManual:true };
+    tracks.push(t); made.push(t);
+  }
+  renderList();
+  for(const t of made){ try{ await analyzeStructure(t); }catch(e){} }
+  $("decoding").style.display="none"; $("demoBtn").disabled=false;
+  renderList();
+  maybeAutoSort();
+});
+async function synthTrack(bpm, root, secs){
+  const sr=44100, oc=new OfflineAudioContext(2, sr*secs, sr), beat=60/bpm;
+  const mg=oc.createGain(); mg.gain.value=.8; mg.connect(oc.destination);
+  for(let t=0; t<secs-0.3; t+=beat){
+    // kick
+    const o=oc.createOscillator(), g=oc.createGain();
+    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+.12);
+    g.gain.setValueAtTime(.9,t); g.gain.exponentialRampToValueAtTime(.001,t+.22);
+    o.connect(g).connect(mg); o.start(t); o.stop(t+.25);
+    // hat (offbeat)
+    const n=oc.createBufferSource(), nb=oc.createBuffer(1,sr*.05,sr), d=nb.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
+    n.buffer=nb; const hg=oc.createGain(); hg.gain.value=.12;
+    const hp=oc.createBiquadFilter(); hp.type="highpass"; hp.frequency.value=7000;
+    n.connect(hp).connect(hg).connect(mg); n.start(t+beat/2);
+  }
+  // bassline 每半拍
+  const seq=[1,1,1.5,1,2,1,1.5,1.19];
+  for(let t=0,k=0; t<secs-0.5; t+=beat/2,k++){
+    const o=oc.createOscillator(), g=oc.createGain();
+    o.type="sawtooth"; o.frequency.value=root*seq[k%seq.length];
+    const f=oc.createBiquadFilter(); f.type="lowpass"; f.frequency.value=700;
+    g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(.25,t+.02);
+    g.gain.exponentialRampToValueAtTime(.001,t+beat*.45);
+    o.connect(f).connect(g).connect(mg); o.start(t); o.stop(t+beat*.5);
+  }
+  return oc.startRendering();
+}
+
+/* ---------- Key/BPM 标签(点击编辑) ---------- */
+function makeChip(t, kind){
+  const b=document.createElement("button");
+  b.className="chip "+kind;
+  if(t.analyzing){ b.textContent="…"; b.disabled=true; b.title="分析中"; return b; }
+  if(kind==="key"){
+    b.textContent = t.key||"KEY?";
+    if(t.key){
+      const hue=(parseInt(t.key)*30)%360;
+      b.style.color=`hsl(${hue},85%,70%)`;
+      b.style.borderColor=`hsla(${hue},85%,60%,.5)`;
+      b.style.background=`hsla(${hue},85%,50%,.12)`;
+    }
+  } else {
+    b.textContent = t.bpm? t.bpm+" BPM" : "BPM?";
+    if(t.beatSrc==="essentia"){ // 绿色=已建立 Essentia 逐拍网格
+      b.style.color="#3ddc84"; b.style.borderColor="rgba(61,220,132,.5)";
+    }
+  }
+  b.title = (kind==="bpm"&&t.beatSrc==="essentia")
+    ? `Essentia 节拍网格 · ${t.beats.length} 拍 · 置信 ${(t.beatConf||0).toFixed(1)} —— 点击可手动改 BPM`
+    : "点击修改(自动检测精度有限)";
+  b.addEventListener("mousedown",e=>e.stopPropagation());
+  b.addEventListener("click",e=>{
+    e.stopPropagation();
+    const inp=document.createElement("input"); inp.className="chipedit";
+    inp.value = kind==="key"? (t.key||"") : (t.bpm||"");
+    inp.placeholder = kind==="key"? "如 8A":"如 126";
+    b.replaceWith(inp); inp.focus(); inp.select();
+    const done=()=>{
+      const v=inp.value.trim();
+      if(kind==="key"){
+        if(v==="") { t.key=null; t.keyManual=false; }
+        else{ const m=v.toUpperCase().match(/^([1-9]|1[0-2])([AB])$/); if(m){ t.key=m[1]+m[2]; t.keyManual=true; } }
+      }else{
+        if(v==="") t.bpm=null;
+        else{ const n=parseFloat(v); if(n>=40&&n<=220){ t.bpm=Math.round(n*10)/10; t.bpmExact=n; t._proc={}; analyzeStructure(t).then(renderList); } } // BPM 变了:作废变速缓存,重算 beat grid 与 section
+      }
+      renderList();
+    };
+    inp.addEventListener("blur",done);
+    inp.addEventListener("keydown",ev=>{ if(ev.key==="Enter") inp.blur(); });
+    inp.addEventListener("mousedown",ev=>ev.stopPropagation());
+    inp.addEventListener("click",ev=>ev.stopPropagation());
+  });
+  return b;
+}
+
+/* ---------- 歌单渲染 + 拖拽排序 ---------- */
+/* ---------- Key / BPM 自动检测 ---------- */
+// Camelot 映射,索引 = 主音 pitch class (C=0)
+const CAMELOT_MAJ=["8B","3B","10B","5B","12B","7B","2B","9B","4B","11B","6B","1B"];
+const CAMELOT_MIN=["5A","12A","7A","2A","9A","4A","11A","6A","1A","8A","3A","10A"];
+
+function fft(re,im){ // 迭代 radix-2,原地
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit;
+    if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; } }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cr=1,ci=0;
+      for(let k=0;k<len/2;k++){
+        const a=i+k,b=i+k+len/2;
+        const vr=re[b]*cr-im[b]*ci, vi=re[b]*ci+im[b]*cr;
+        re[b]=re[a]-vr; im[b]=im[a]-vi; re[a]+=vr; im[a]+=vi;
+        const ncr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=ncr;
+      } } }
+}
+
+/* ===== 内置节拍跟踪 v2(借鉴 Auto-DJ / IDLab 研究实现)=====
+   谱通量 onset(对数压缩 + kick 频段加权)→ 自适应均值阈值 → 半波整流
+   → 自相关 → 梳状打分(1/2/4/8 倍 + 对数正态先验 + 八度消歧)→ 逐拍吸附。
+   Node 实测:BPM 平均误差 0.24%(旧法 0.37%);拍位置误差中位 12.7ms,
+   60 秒累计漂移仅 3.2ms(不累积)。 */
+function onsetCurveV2(ch, sr){
+  const FR=1024, HOP=512, nF=Math.floor((ch.length-FR)/HOP);
+  if(nF<8) return null;
+  const win=new Float32Array(FR);
+  for(let i=0;i<FR;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/FR);
+  const re=new Float32Array(FR), im=new Float32Array(FR), nB=FR/2;
+  const w=new Float32Array(nB);
+  for(let b=0;b<nB;b++){ const f=b*sr/FR;
+    w[b]= f<40?0.2 : f<200?1.6 : f<800?1.0 : f<4000?0.7 : 0.4; }  // kick 频段加权
+  const prev=new Float32Array(nB), flux=new Float32Array(nF);
+  for(let k=0;k<nF;k++){
+    const p=k*HOP;
+    for(let i=0;i<FR;i++){ re[i]=ch[p+i]*win[i]; im[i]=0; }
+    fft(re,im);
+    let s=0;
+    for(let b=1;b<nB;b++){
+      const mag=Math.sqrt(re[b]*re[b]+im[b]*im[b]);
+      const lg=Math.log1p(mag*100), d=lg-prev[b];
+      if(d>0) s+=d*w[b];
+      prev[b]=lg;
+    }
+    flux[k]=s;
+  }
+  const N=16, out=new Float32Array(nF);          // 自适应均值阈值 + 半波整流
+  for(let k=0;k<nF;k++){
+    let s=0,c=0;
+    for(let j=Math.max(0,k-N/2); j<Math.min(nF,k+N/2); j++){ s+=flux[j]; c++; }
+    out[k]=Math.max(0, flux[k]-s/c);
+  }
+  return out;
+}
+function trackBeatsBuiltin(buffer){
+  const sr=buffer.sampleRate, ch=buffer.getChannelData(0), HOP=512, fs=sr/HOP;
+  const nov=onsetCurveV2(ch, sr);
+  if(!nov) return null;
+  const n=nov.length, dur=ch.length/sr;
+  let mean=0; for(let i=0;i<n;i++) mean+=nov[i]; mean/=n;
+  const x=new Float32Array(n); for(let i=0;i<n;i++) x[i]=nov[i]-mean;
+  const minBpm=70, maxBpm=190;
+  const maxLag=Math.ceil(fs*60/minBpm)*4+4;
+  const ac=new Float64Array(maxLag+2);
+  for(let lag=1;lag<=maxLag;lag++){
+    let s=0; for(let i=0;i<n-lag;i++) s+=x[i]*x[i+lag];
+    ac[lag]=s/(n-lag);
+  }
+  const acAt=idx=>{ const i0=Math.floor(idx), fr=idx-i0;
+    if(i0<1||i0+1>maxLag) return 0; return ac[i0]*(1-fr)+ac[i0+1]*fr; };
+  const MULT=[1,2,4,8];
+  const score=bpm=>{ const fpb=60*fs/bpm; let s=0,c=0;
+    for(const m of MULT){ if(m*fpb>maxLag) break; s+=acAt(m*fpb); c++; }
+    return c<2? -1e18 : s/c; };
+  let bBpm=125, bSc=-1e18;
+  for(let bpm=minBpm; bpm<=maxBpm; bpm+=0.02){
+    const sc=score(bpm)*Math.exp(-Math.pow(Math.log(bpm/125)/0.42,2)/2);
+    if(sc>bSc){ bSc=sc; bBpm=bpm; }
+  }
+  for(let k=0;k<2;k++){                          // 八度 / 三连音消歧
+    const fpb=60*fs/bBpm;
+    if(bBpm*2<=maxBpm && acAt(fpb/2)>0.62*acAt(fpb)){ bBpm*=2; continue; }
+    if(bBpm*1.5<=maxBpm && acAt(fpb/1.5)>0.70*acAt(fpb)){ bBpm*=1.5; continue; }
+    break;
+  }
+  { let b2=bBpm,s2=-1e18;                        // ±3% 精扫
+    for(let bpm=bBpm*0.97; bpm<=bBpm*1.03; bpm+=0.005){ const s=score(bpm); if(s>s2){s2=s;b2=bpm;} }
+    bBpm=b2; }
+  const spb=60/bBpm;
+  let ph=0, ps=-1e18;                            // 相位 1ms 扫描
+  for(let p=0;p<spb;p+=0.001){
+    let s=0,c=0;
+    for(let t=p;t<dur;t+=spb){ const i=Math.round(t*fs); if(i<n){ s+=nov[i]; c++; } }
+    if(c&&s/c>ps){ ps=s/c; ph=p; }
+  }
+  /* 逐拍吸附到局部 onset 峰(抛物线插值),周期缓慢跟随速度起伏 */
+  const beats=[]; let t=ph, period=spb;
+  const winR=0.14;
+  while(t<dur-0.05 && beats.length<20000){
+    const lo=Math.max(0,(t-winR*period)*fs), hi=Math.min(n-1,(t+winR*period)*fs);
+    let best=-1,bi=-1;
+    for(let i=Math.ceil(lo);i<=Math.floor(hi);i++) if(nov[i]>best){best=nov[i];bi=i;}
+    let tt=t;
+    if(bi>=0&&best>0){
+      let p=bi;
+      if(bi>0&&bi<n-1){ const y1=nov[bi-1],y2=nov[bi],y3=nov[bi+1],d=y1-2*y2+y3;
+        if(Math.abs(d)>1e-12){ const dd=0.5*(y1-y3)/d; if(Math.abs(dd)<1) p=bi+dd; } }
+      tt=p/fs;
+    }
+    beats.push(tt);
+    if(beats.length>1){
+      const meas=beats[beats.length-1]-beats[beats.length-2];
+      if(meas>spb*0.8&&meas<spb*1.2) period=period*0.88+meas*0.12;
+    }
+    t=tt+period;
+  }
+  return {bpm:bBpm, beats};
+}
+
+function detectBPM(buffer){
+  const sr=buffer.sampleRate, ch=buffer.getChannelData(0), hop=512;
+  const start=Math.floor(Math.max(0,(buffer.duration/2-30))*sr);
+  const end=Math.min(ch.length, start+60*sr);
+  const env=[]; let prev=0;
+  for(let i=start;i+hop<end;i+=hop){
+    let e=0; for(let j=0;j<hop;j+=4) e+=ch[i+j]*ch[i+j];
+    e=Math.sqrt(e); env.push(Math.max(0,e-prev)); prev=e; // 半波整流的能量差 = onset 强度
+  }
+  const fs=sr/hop, n=env.length;
+  if(n<fs*5) return null;
+  const mean=env.reduce((a,b)=>a+b,0)/n, e2=env.map(x=>x-mean);
+  const minLag=Math.floor(fs*60/190), maxLag=Math.ceil(fs*60/60);
+  const sc=new Float64Array(maxLag+2);
+  let best=-1e18, bestLag=0;
+  for(let lag=minLag;lag<=maxLag;lag++){
+    let s=0; for(let i=0;i<n-lag;i++) s+=e2[i]*e2[i+lag];
+    s/=(n-lag);
+    const bpm=60*fs/lag;
+    s*=1+0.12*Math.exp(-Math.pow((bpm-125)/35,2)); // 轻微偏好常见舞曲速度
+    sc[lag]=s;
+    if(s>best){best=s;bestLag=lag;}
+  }
+  if(!bestLag) return null;
+  // 抛物线插值获得亚格点精度(整数 lag 量化在 126BPM 处误差可达 ±0.05%,高 BPM 更差)
+  let lagF=bestLag;
+  if(bestLag>minLag && bestLag<maxLag){
+    const y1=sc[bestLag-1], y2=sc[bestLag], y3=sc[bestLag+1];
+    const den=y1-2*y2+y3;
+    if(Math.abs(den)>1e-18){ const d=0.5*(y1-y3)/den; if(Math.abs(d)<1) lagF=bestLag+d; }
+  }
+  let bpm=60*fs/lagF;
+  while(bpm<70) bpm*=2; while(bpm>180) bpm/=2;
+  const exact=bpm;
+  let disp=Math.round(bpm*10)/10;
+  if(Math.abs(disp-Math.round(disp))<0.3) disp=Math.round(disp);
+  return {disp, exact};
+}
+
+/* 区域内本地精确 BPM(以全曲值为种子只搜 ±6%,抛物线插值)——歌内 tempo 微漂时用过渡区就地测速 */
+function localExactBPM(t, from, to){
+  const base=t.bpmExact||t.bpm; if(!base) return null;
+  const sr=t.buffer.sampleRate, ch=t.buffer.getChannelData(0), hop=512;
+  const i0=Math.max(0,Math.floor(from*sr)), i1=Math.min(ch.length,Math.floor(to*sr));
+  if(i1-i0<sr*10) return base;
+  const env=[]; let prev=0;
+  for(let i=i0;i+hop<i1;i+=hop){
+    let e=0; for(let j=0;j<hop;j+=4) e+=ch[i+j]*ch[i+j];
+    e=Math.sqrt(e); env.push(Math.max(0,e-prev)); prev=e;
+  }
+  const fs=sr/hop, n=env.length;
+  const mean=env.reduce((a,b)=>a+b,0)/n, e2=env.map(x=>x-mean);
+  const lag0=fs*60/base;
+  const lo=Math.max(2,Math.floor(lag0*0.94)), hi=Math.min(n-2,Math.ceil(lag0*1.06));
+  if(hi<=lo) return base;
+  const sc=new Float64Array(hi+2);
+  let best=-1e18, bl=0;
+  for(let lag=lo;lag<=hi;lag++){
+    let s=0; for(let i=0;i<n-lag;i++) s+=e2[i]*e2[i+lag];
+    sc[lag]=s/(n-lag);
+    if(sc[lag]>best){best=sc[lag];bl=lag;}
+  }
+  if(!bl) return base;
+  let lagF=bl;
+  if(bl>lo && bl<hi){
+    const den=sc[bl-1]-2*sc[bl]+sc[bl+1];
+    if(Math.abs(den)>1e-18){ const d=0.5*(sc[bl-1]-sc[bl+1])/den; if(Math.abs(d)<1) lagF=bl+d; }
+  }
+  return 60*fs/lagF;
+}
+
+/* ---------- Essentia.js 专业 key 检测(可用时优先) ---------- */
+let essentia=null;
+const NOTE_TO_CAMELOT={
+  major:{C:"8B","C#":"3B",Db:"3B",D:"10B","D#":"5B",Eb:"5B",E:"12B",F:"7B","F#":"2B",Gb:"2B",G:"9B","G#":"4B",Ab:"4B",A:"11B","A#":"6B",Bb:"6B",B:"1B"},
+  minor:{A:"8A","A#":"3A",Bb:"3A",B:"10A",C:"5A","C#":"12A",Db:"12A",D:"7A","D#":"2A",Eb:"2A",E:"9A",F:"4A","F#":"11A",Gb:"11A",G:"6A","G#":"1A",Ab:"1A"}
+};
+function loadScript(u){
+  return new Promise((res,rej)=>{
+    const s=document.createElement("script"); s.src=u;
+    s.onload=res; s.onerror=()=>rej(new Error("加载失败: "+u));
+    document.head.appendChild(s);
+  });
+}
+let essentiaResolve, essentiaReject;
+const essentiaReady=new Promise((res,rej)=>{ essentiaResolve=res; essentiaReject=rej; });
+essentiaReady.catch(()=>{}); // 避免未处理拒绝告警
+setTimeout(()=>essentiaReject&&essentiaReject(new Error("Essentia 加载超时")), 20000);
+(async function initEssentia(){
+  const tag=$("engineTag");
+  /* 加载顺序:优先本地 vendor(单文件内嵌 wasm,国内可用、file:// 也能跑),
+     本地缺失/失败时才回退 jsDelivr CDN(国内常不可达,仅作兜底)。 */
+  const SOURCES=[
+    ["./vendor/essentia/essentia-wasm-inline.js", "./vendor/essentia/essentia.js-core.min.js"],
+    ["https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia-wasm.web.js", "https://cdn.jsdelivr.net/npm/essentia.js@0.1.3/dist/essentia.js-core.js"]
+  ];
+  let lastErr=null;
+  for(const [wasmUrl, coreUrl] of SOURCES){
+    try{
+      await loadScript(wasmUrl);
+      await loadScript(coreUrl);
+      lastErr=null;
+      break;
+    }catch(e){ lastErr=e; console.warn("引擎源加载失败,尝试下一个:", wasmUrl, e&&e.message); }
+  }
+  try{
+    if(lastErr) throw lastErr;
+    const wasm=await EssentiaWASM();
+    essentia=new Essentia(wasm);
+    tag.textContent="ENGINE: Essentia.js ✓(KEY + BEAT 默认专业检测)"; tag.style.color="#3ddc84";
+    $("beatBtn").style.display="block";
+    essentiaResolve(essentia);
+    // 补测 Essentia 加载前已导入的歌(key + 节拍网格)
+    let changed=false;
+    for(const t of [...tracks]){
+      if(t.analyzing) continue;
+      if(!t.keyManual){ try{ const k=await detectKeyEssentia(t.buffer); if(k){ t.key=k; changed=true; } }catch(e){} }
+      if(!t.beats){ try{ if(await applyEssentiaBeats(t)) changed=true; }catch(e){} }
+    }
+    if(changed) renderList();
+  }catch(e){
+    console.warn("Essentia 不可用,使用内置检测:",e.message);
+    tag.textContent="ENGINE: 内置算法回退(Essentia 未加载——检查 vendor/essentia 目录是否随页面一起部署)";
+    tag.style.color="var(--amber)";
+    essentiaReject(e);
+  }
+})();
+/* 给单曲建立/刷新 Essentia 节拍网格 */
+async function applyEssentiaBeats(t, method){
+  const be=await detectBeatsEssentia(t.buffer, method|| ($("beatHQ")&&$("beatHQ").checked? "multifeature":"degara"));
+  if(!be) return false;
+  t.beats=be.ticks; t.beatSrc="essentia"; t.beatConf=be.conf;
+  t.downbeatPhase=pickDownbeatPhase(t); t.bpmExact=be.bpm;
+  const ri=Math.round(be.bpm); if(Math.abs(be.bpm-ri)<0.15) t.bpmExact=ri;
+  t.bpm=Math.abs(t.bpmExact-Math.round(t.bpmExact))<0.001? Math.round(t.bpmExact) : Math.round(t.bpmExact*10)/10;
+  t._proc={};
+  await analyzeStructure(t);
+  console.log(`[beat] ${t.name} Essentia ${t.bpm}BPM · ${t.beats.length}拍 · 置信${(be.conf||0).toFixed(1)} · 相位${t.downbeatPhase}`);
+  return true;
+}
+async function detectKeyEssentia(buffer){
+  // 中段 ≤180s 重采样 16kHz 单声道 → KeyExtractor(edma 电子乐轮廓)
+  const T=Math.min(buffer.duration,180);
+  const start=Math.max(0,(buffer.duration-T)/2);
+  const outSr=16000;
+  const oc=new OfflineAudioContext(1,Math.max(1,Math.floor(T*outSr)),outSr);
+  const s=oc.createBufferSource(); s.buffer=buffer;
+  s.connect(oc.destination); s.start(0,start,T);
+  const mono=(await oc.startRendering()).getChannelData(0);
+  const vec=essentia.arrayToVector(mono);
+  try{
+    const r=essentia.KeyExtractor(vec,true,4096,4096,12,3500,60,25,0.2,"edma",outSr,0.0001,440,"cosine","hann");
+    return NOTE_TO_CAMELOT[r.scale] ? (NOTE_TO_CAMELOT[r.scale][r.key]||null) : null;
+  }finally{ vec.delete(); }
+}
+async function detectKey(buffer){
+  if(essentia){
+    try{ const k=await detectKeyEssentia(buffer); if(k) return k; }
+    catch(e){ console.warn("Essentia 检测失败,回退内置",e); }
+  }
+  return detectKeyBuiltin(buffer);
+}
+
+/* ---------- Essentia 节拍跟踪(RhythmExtractor2013)----------
+   multifeature 模式融合 5 个独立节拍跟踪器取最大互认(MIREX 标准算法)。
+   输出【逐拍时间戳】而非"一个 BPM + 一个相位",天然支持速度起伏——
+   这正是手写检测最大的结构性缺陷(恒定 BPM 假设),也是跑马的根源。
+   返回 {bpm, ticks:[每拍秒], conf};失败返回 null。 */
+async function detectBeatsEssentia(buffer, method){
+  if(!essentia) return null;
+  const outSr=44100; // RhythmExtractor2013 要求 44.1kHz
+  const T=Math.min(buffer.duration, 420);
+  const oc=new OfflineAudioContext(1, Math.max(1,Math.floor(T*outSr)), outSr);
+  const s=oc.createBufferSource(); s.buffer=buffer;
+  s.connect(oc.destination); s.start(0,0,T);
+  const mono=(await oc.startRendering()).getChannelData(0);
+  await new Promise(r=>setTimeout(r,0)); // 让 UI 先刷新进度
+  const vec=essentia.arrayToVector(mono);
+  try{
+    const r=essentia.RhythmExtractor2013(vec, 208, method||"degara", 40);
+    const ticks=essentia.vectorToArray(r.ticks);
+    if(!ticks || ticks.length<8) return null;
+    return {bpm:r.bpm, ticks:Array.from(ticks), conf:r.confidence};
+  }finally{ vec.delete(); }
+}
+/* 手动触发:为全部歌曲建立 Essentia 逐拍网格。
+   默认 degara(快得多);勾选高精度则用 multifeature(慢,但融合 5 个跟踪器)。 */
+async function buildBeatGrids(){
+  const btn=$("beatBtn");
+  if(!essentia){ btn.textContent="Essentia 未加载"; return; }
+  const method=$("beatHQ").checked? "multifeature":"degara";
+  btn.disabled=true;
+  const list=tracks.filter(t=>!t.analyzing);
+  for(let i=0;i<list.length;i++){
+    const t=list[i];
+    btn.textContent=`⏳ 节拍网格 ${i+1}/${list.length} · ${t.name.slice(0,18)}`;
+    await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+    try{ await applyEssentiaBeats(t, method); }
+    catch(e){ console.warn("节拍网格失败:", t.name, e); }
+    renderList();
+  }
+  const n=tracks.filter(t=>t.beats).length;
+  btn.textContent=`✓ 节拍网格已建立(${n}/${tracks.length})· 点击重建`;
+  btn.disabled=false;
+}
+
+/* 从逐拍网格取第 idx 拍时间;支持线性外推(超出网格范围时) */
+function beatTimeAt(t, idx){
+  const g=t.beats; if(!g||!g.length) return null;
+  if(idx>=0 && idx<g.length) return g[idx];
+  if(idx<0){ const p=g[1]-g[0]; return g[0]+idx*p; }
+  const n=g.length, p=g[n-1]-g[n-2];
+  return g[n-1]+(idx-(n-1))*p;
+}
+/* 找最接近 time 的拍索引 */
+function nearestBeatIdx(t, time){
+  const g=t.beats; if(!g||!g.length) return null;
+  let lo=0, hi=g.length-1;
+  while(lo<hi){ const m=(lo+hi)>>1; if(g[m]<time) lo=m+1; else hi=m; }
+  if(lo>0 && Math.abs(g[lo-1]-time)<=Math.abs(g[lo]-time)) lo--;
+  return lo;
+}
+/* 用节拍网格取 downbeat:在 approx 附近找最近的、且与 downbeatPhase 同余的拍 */
+function gridDownbeat(t, approx){
+  const g=t.beats; if(!g||!g.length) return null;
+  const i=nearestBeatIdx(t, approx);
+  const ph=t.downbeatPhase||0;
+  let best=null, bd=Infinity;
+  for(let k=-4;k<=4;k++){
+    const j=i+k;
+    if(j<0||j>=g.length) continue;
+    if(((j-ph)%4+4)%4!==0) continue;
+    const d=Math.abs(g[j]-approx);
+    if(d<bd){ bd=d; best=g[j]; }
+  }
+  return best;
+}
+/* 判定 downbeat 相位:4 个候选中低频 onset 能量最大者 */
+function pickDownbeatPhase(t){
+  const g=t.beats; if(!g||g.length<16) return 0;
+  const sr=t.buffer.sampleRate, ch=t.buffer.getChannelData(0);
+  const win=Math.floor(sr*0.06);
+  const score=[0,0,0,0];
+  for(let i=0;i<g.length;i++){
+    const s0=Math.floor(g[i]*sr);
+    if(s0<0||s0+win>=ch.length) continue;
+    let e=0; for(let j=0;j<win;j+=4){ const v=ch[s0+j]; e+=v*v; }
+    score[i%4]+=Math.sqrt(e);
+  }
+  let bi=0; for(let i=1;i<4;i++) if(score[i]>score[bi]) bi=i;
+  return bi;
+}
+
+async function detectKeyBuiltin(buffer){
+  /* v3:KeyFinder(libkeyfinder,Mixxx 同款思路)式 constant-Q 半音带 chromagram
+     - 下采样到 4410Hz 单声道 → FFT 16384,频率分辨率 0.27Hz(前版 5.4Hz),
+       C1(32.7Hz)的半音间隔≈1.9Hz 也能整带分开,低音区彻底不涂抹
+     - C1–B6 六个八度、每半音一个余弦核频带聚合 → 12 音级 chroma
+     - 帧间中位数(而非求和):鼓点/瞬态帧不再污染整体
+     - Krumhansl + Temperley 双轮廓集成打分 */
+  try{
+    const T=Math.min(buffer.duration,120);
+    const start=Math.max(0,(buffer.duration-T)/2);
+    const outSr=4410, len=Math.max(1,Math.floor(T*outSr));
+    const oc=new OfflineAudioContext(1,len,outSr);
+    const s=oc.createBufferSource(); s.buffer=buffer;
+    s.connect(oc.destination); s.start(0,start,T);
+    const ds=(await oc.startRendering()).getChannelData(0);
+    const FR=16384, HOP=outSr; // 帧长 3.7s,步进 1s
+    if(ds.length<FR) return null;
+    const win=new Float32Array(FR);
+    for(let i=0;i<FR;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/FR);
+    // 半音频带核:C1 起最多 72 带,带宽 ±0.6 半音,余弦权重
+    const f0=32.7031956626, bands=[];
+    for(let k=0;k<72;k++){
+      const fc=f0*Math.pow(2,k/12);
+      const lo=fc*Math.pow(2,-0.6/12), hi=fc*Math.pow(2,0.6/12);
+      if(hi>=outSr/2) break;
+      const b0=Math.max(1,Math.ceil(lo*FR/outSr)), b1=Math.min(FR/2-1,Math.floor(hi*FR/outSr));
+      if(b1<b0) continue;
+      const w=[];
+      for(let b=b0;b<=b1;b++){
+        const f=b*outSr/FR;
+        w.push(0.5+0.5*Math.cos(Math.PI*Math.min(1,Math.abs(12*Math.log2(f/fc))/0.6)));
+      }
+      bands.push({pc:k%12,b0,b1,w});
+    }
+    const re=new Float32Array(FR), im=new Float32Array(FR);
+    const frames=[]; let cnt=0;
+    for(let p=0;p+FR<=ds.length;p+=HOP){
+      let en=0; for(let i=0;i<FR;i+=8) en+=ds[p+i]*ds[p+i];
+      if(en<1e-7) continue; // 跳过静音帧
+      for(let i=0;i<FR;i++){ re[i]=ds[p+i]*win[i]; im[i]=0; }
+      fft(re,im);
+      const cf=new Float32Array(12);
+      for(const bd of bands){
+        let sum=0,j=0;
+        for(let b=bd.b0;b<=bd.b1;b++,j++) sum+=Math.sqrt(re[b]*re[b]+im[b]*im[b])*bd.w[j];
+        cf[bd.pc]+=sum;
+      }
+      frames.push(cf);
+      if(++cnt%12===0) await new Promise(r=>setTimeout(r));
+    }
+    if(!frames.length) return null;
+    const chroma=new Float32Array(12);
+    for(let pc=0;pc<12;pc++){
+      const vals=frames.map(f=>f[pc]).sort((a,b)=>a-b);
+      chroma[pc]=vals[(vals.length-1)>>1];
+    }
+    const KS_MAJ=[6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
+    const KS_MIN=[6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17];
+    const TP_MAJ=[0.748,0.060,0.488,0.082,0.670,0.460,0.096,0.715,0.104,0.366,0.057,0.400];
+    const TP_MIN=[0.712,0.084,0.474,0.618,0.049,0.460,0.105,0.747,0.404,0.067,0.133,0.330];
+    const corr=(prof,rot)=>{
+      let sx=0,sy=0,sxy=0,sxx=0,syy=0;
+      for(let i=0;i<12;i++){ const x=chroma[(i+rot)%12], y=prof[i];
+        sx+=x;sy+=y;sxy+=x*y;sxx+=x*x;syy+=y*y; }
+      const den=Math.sqrt((12*sxx-sx*sx)*(12*syy-sy*sy))||1;
+      return (12*sxy-sx*sy)/den;
+    };
+    let best=-9, bestKey=null;
+    for(let r=0;r<12;r++){
+      const cM=corr(KS_MAJ,r)+corr(TP_MAJ,r);
+      if(cM>best){best=cM;bestKey=CAMELOT_MAJ[r];}
+      const cm=corr(KS_MIN,r)+corr(TP_MIN,r);
+      if(cm>best){best=cm;bestKey=CAMELOT_MIN[r];}
+    }
+    return bestKey;
+  }catch(e){ console.warn("detectKey v3 失败",e); return null; }
+}
+
+/* ---------- Beat grid + Section 结构分析(rekordbox 式) ----------
+   Beat grid 仅存内部数据(beatOffset/barOffset),不在 UI 画竖线。
+   Section:分频段包络 → 按 bar 聚合 → 8-bar phrase 特征 → 启发式六分类 → 合并相邻 */
+const SEC_COLORS={INTRO:"#4dd0e1",VERSE:"#5c7cfa",BUILD:"#ffb020",DROP:"#ff2d95",BREAK:"#9775fa",OUTRO:"#26a69a"};
+
+async function analyzeStructure(t){
+  t.sections=null;
+  if(!t.bpm) return;
+  const sr=t.buffer.sampleRate, ch=t.buffer.getChannelData(0), hop=512;
+  const barDur=4*60/t.bpm;
+  if(t.beats){ // Essentia 网格:直接取第一个 downbeat
+    t.beatOffset=t.beats[0];
+    t.barOffset=t.beats[t.downbeatPhase||0] ?? t.beats[0];
+  }else{
+    /* 回退:全曲 onset 包络 → 与 BPM 脉冲串互相关求节拍相位 */
+    const env=[]; let prev=0;
+    for(let i=0;i+hop<ch.length;i+=hop){
+      let e=0; for(let j=0;j<hop;j+=4) e+=ch[i+j]*ch[i+j];
+      e=Math.sqrt(e); env.push(Math.max(0,e-prev)); prev=e;
+    }
+    const P=(60/t.bpm)*sr/hop;
+    let bestS=-1,bestPh=0;
+    for(let ph=0; ph<P; ph+=0.25){
+      let s=0,c=0;
+      for(let x=ph;x<env.length;x+=P){ s+=env[x|0]||0; c++; }
+      if(c && s/c>bestS){ bestS=s/c; bestPh=ph; }
+    }
+    let bestB=0,bestBs=-1;
+    for(let b=0;b<4;b++){
+      let s=0,c=0;
+      for(let x=bestPh+b*P;x<env.length;x+=4*P){ s+=env[x|0]||0; c++; }
+      if(c && s/c>bestBs){ bestBs=s/c; bestB=b; }
+    }
+    t.beatOffset=bestPh*hop/sr;
+    t.barOffset=((bestPh+bestB*P)*hop/sr)%barDur;
+  }
+  /* 2) 分频段能量包络(FFT) */
+  const FR=4096, FH=4096;
+  const re=new Float32Array(FR), im=new Float32Array(FR);
+  const win=new Float32Array(FR); for(let i=0;i<FR;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/FR);
+  const nF=Math.max(1,Math.floor((ch.length-FR)/FH));
+  const fLow=new Float32Array(nF), fMid=new Float32Array(nF), fHi=new Float32Array(nF);
+  for(let k=0;k<nF;k++){
+    const p=k*FH;
+    for(let i=0;i<FR;i++){ re[i]=ch[p+i]*win[i]; im[i]=0; }
+    fft(re,im);
+    let lo=0,md=0,hi=0;
+    for(let b=1;b<FR/2;b++){
+      const f=b*sr/FR, pw=re[b]*re[b]+im[b]*im[b];
+      if(f<250) lo+=pw; else if(f<4000) md+=pw; else if(f<16000) hi+=pw;
+    }
+    fLow[k]=lo; fMid[k]=md; fHi[k]=hi;
+    if(k%40===0) await new Promise(r=>setTimeout(r));
+  }
+  /* 3) 按 bar 聚合(对齐 downbeat) */
+  const frameT=FH/sr, bars=[];
+  for(let bs=t.barOffset; bs<t.dur-0.5; bs+=barDur){
+    const k0=Math.max(0,Math.floor(bs/frameT)), k1=Math.min(nF,Math.ceil((bs+barDur)/frameT));
+    if(k1<=k0) continue;
+    let lo=0,md=0,hi=0;
+    for(let k=k0;k<k1;k++){ lo+=fLow[k]; md+=fMid[k]; hi+=fHi[k]; }
+    const n=k1-k0;
+    bars.push({s:bs, e:Math.min(bs+barDur,t.dur), low:lo/n, hi:hi/n, E:(lo+md+hi)/n});
+  }
+  if(bars.length<4){ t.sections=[{s:0,e:t.dur,label:"VERSE"}]; return; }
+  /* 4) 8-bar phrase 特征 + 启发式分类 */
+  const phrases=[];
+  for(let i=0;i<bars.length;i+=8){
+    const g=bars.slice(i,i+8);
+    const E=g.reduce((a,b)=>a+b.E,0)/g.length;
+    const low=g.reduce((a,b)=>a+b.low,0)/g.length;
+    const h1=g.slice(0,g.length>>1), h2=g.slice(g.length>>1);
+    const m1=h1.reduce((a,b)=>a+b.E,0)/Math.max(h1.length,1);
+    const m2=h2.reduce((a,b)=>a+b.E,0)/Math.max(h2.length,1);
+    phrases.push({s:g[0].s, e:g[g.length-1].e, E, lowShare:low/(E||1e-12), slope:(m2-m1)/(E||1e-12)});
+  }
+  const Es=[...phrases].map(p=>p.E).sort((a,b)=>a-b);
+  const pct=q=>Es[Math.min(Es.length-1,Math.floor(q*Es.length))];
+  const lows=[...phrases].map(p=>p.lowShare).sort((a,b)=>a-b);
+  const medLow=lows[(lows.length-1)>>1];
+  phrases.forEach((p,i)=>{
+    const first=i===0, last=i===phrases.length-1;
+    if(first && p.E<pct(0.6)) p.label="INTRO";
+    else if(last && p.E<pct(0.6)) p.label="OUTRO";
+    else if(p.E>=pct(0.65) && p.lowShare>=medLow*0.85) p.label="DROP";
+    else if(p.slope>0.3) p.label="BUILD";
+    else if(p.E<pct(0.35) && p.lowShare<medLow*0.6) p.label="BREAK";
+    else p.label="VERSE";
+  });
+  for(let i=0;i<phrases.length-1;i++) // DROP 前能量上行的 VERSE 改判 BUILD
+    if(phrases[i].label==="VERSE" && phrases[i+1].label==="DROP" && phrases[i].slope>0.12) phrases[i].label="BUILD";
+  const secs=[];
+  for(const p of phrases){
+    const lastS=secs[secs.length-1];
+    if(lastS && lastS.label===p.label) lastS.e=p.e;
+    else secs.push({s:p.s, e:p.e, label:p.label});
+  }
+  secs[0].s=0; secs[secs.length-1].e=t.dur;
+  t.sections=secs;
+}
+
+async function analyzeTrack(t){
+  if(t._anStarted) return; t._anStarted=true;
+  /* 节拍检测默认走 Essentia(用户要求)。为避免主线程冻结:
+     - 等待 Essentia 就绪(最多 20s)
+     - 用 degara 模式(比 multifeature 快数倍),分析前后让出主线程刷新 UI
+     - 失败/未加载时才自动回退内置算法 */
+  try{
+    await essentiaReady;
+    await applyEssentiaBeats(t);
+  }catch(e){ console.warn("Essentia 节拍不可用,回退内置:", e&&e.message); }
+  try{
+    if(t.beats) throw {skip:1}; // 已有 Essentia 网格,跳过内置检测
+    /* 内置节拍跟踪 v2:同样产出逐拍网格,使逐拍同步内核在无 Essentia 时也能生效 */
+    const tb=trackBeatsBuiltin(t.buffer);
+    if(tb && tb.beats.length>32){
+      t.beats=tb.beats; t.beatSrc="builtin"; t.beatConf=null;
+      t.downbeatPhase=pickDownbeatPhase(t);
+      t.bpmExact=tb.bpm;
+      const ri=Math.round(tb.bpm); if(Math.abs(tb.bpm-ri)<0.15) t.bpmExact=ri;
+      t.bpm=Math.abs(t.bpmExact-Math.round(t.bpmExact))<0.001? Math.round(t.bpmExact) : Math.round(t.bpmExact*10)/10;
+      console.log(`[beat] ${t.name} 内置v2 ${t.bpm}BPM · ${t.beats.length}拍 · 相位${t.downbeatPhase}`);
+    }else{
+      const r=detectBPM(t.buffer);
+      if(r){
+        t.bpmExact=r.exact;
+        const ri=Math.round(r.exact), rh=Math.round(r.exact*2)/2;
+        if(Math.abs(r.exact-ri)<0.12) t.bpmExact=ri;
+        else if(Math.abs(r.exact-rh)<0.06) t.bpmExact=rh;
+        t.bpm=Math.abs(t.bpmExact-Math.round(t.bpmExact))<0.001? Math.round(t.bpmExact) : Math.round(t.bpmExact*10)/10;
+      }
+    }
+  }catch(e){ if(!e||!e.skip) console.warn("BPM 检测失败",e); }
+  try{ t.key=await detectKey(t.buffer); }catch(e){ console.warn("Key 检测失败",e); }
+  try{ await analyzeStructure(t); }catch(e){ console.warn("结构分析失败",e); }
+  t.analyzing=false; renderList();
+}
+
+/* ---------- 混音约束(用户定)----------
+   ① 单曲 BPM 变化 ≤10:变得太多 time-stretch 会明显失真;
+   ② 两曲 BPM 差 >20 则不可 mix —— 中点对齐时各变「差值/2」,差 20 即已达单曲上限;
+   ③ 排歌以 BPM 为第一优先,key 兼容作为次级偏好。 */
+const MAX_BPM_SHIFT=10;      // 单曲最大变速幅度(BPM)
+const MAX_PAIR_DIFF=20;      // 相邻两曲最大 BPM 差,超过则不做 beatmatch
+const KEY_BONUS_BPM=2;       // 排序时 key 兼容折算成"相当于近 2 BPM"的优势
+function canBeatmatch(a,b){ return a&&b&&Math.abs(a-b)<=MAX_PAIR_DIFF; }
+/* 目标 BPM:两曲中点,并强制任一侧变化不超过 MAX_BPM_SHIFT */
+function pairTarget(a,b){
+  if(!canBeatmatch(a,b)) return null;
+  let T=(a+b)/2;
+  T=Math.min(T, Math.min(a,b)+MAX_BPM_SHIFT);
+  T=Math.max(T, Math.max(a,b)-MAX_BPM_SHIFT);
+  return Math.round(T);
+}
+
+/* ---------- 过渡长度自适应(以小节为单位,DJ 的思维单位)----------
+   真实 DJ 想的是"混 16 小节"而不是"混 15 秒",过渡必须落在 phrase 边界(8/16/32 小节)。
+   跨曲风最稳的默认是 8 小节:在几乎所有 4/4 流行音乐里都是一个完整乐句,
+   短到即使 key 不完美或有人声重叠也能接受,长到不像一刀切。
+   条件好(双方有 OUTRO/INTRO 且 key 兼容)才放长到 16;条件差则收到 4。 */
+const OVL_BARS_OPTIONS=[4,8,16,32];
+const MAX_OVL_BARS=32;
+/* 节拍稳定度:拍间隔的变异系数。民谣/氛围/现场录音等自由速度素材会很高,
+   这类歌硬做 beatmatch 是最难听的失败,直接不对齐、走长音量淡化。 */
+function beatSteadiness(t){
+  const g=t.beats; if(!g||g.length<16) return 1;
+  const iv=[]; for(let i=1;i<g.length;i++) iv.push(g[i]-g[i-1]);
+  const m=iv.reduce((a,b)=>a+b,0)/iv.length;
+  if(!(m>0)) return 1;
+  let v=0; for(const x of iv) v+=(x-m)*(x-m);
+  return Math.sqrt(v/iv.length)/m;             // 越小越稳,>0.08 视为不适合对齐
+}
+function isBeatSteady(t){ return beatSteadiness(t)<=0.08; }
+/* overlap 小节数:demo 阶段从简 —— 用户直接选 8 / 16 / 32,不做自适应分档。
+   8 小节是跨曲风最稳的默认(几乎所有 4/4 流行音乐的一个完整乐句);
+   实际长度仍受两侧素材长度约束(intro/outro 不够长时自动缩短)。 */
+function chooseOverlapBars(a, b){
+  return parseInt($("ovlSel").value)||8;
+}
+
+/* ---------- Camelot 兼容 + 自动排序 ---------- */
+function camelotCompatible(k1,k2){
+  if(!k1||!k2) return false;
+  const n1=parseInt(k1), l1=k1.slice(-1), n2=parseInt(k2), l2=k2.slice(-1);
+  if(n1===n2) return true;                              // 同数字(同 key 或相对大小调)
+  const d=Math.abs(n1-n2);
+  return l1===l2 && (d===1||d===11);                    // 同字母 ±1(含 12↔1 环绕)
+}
+let userCustomized=false; // 用户手动拖拽过顺序后,系统不再自动覆盖
+/* BPM 优先排序(用户要求):以 BPM 接近为第一准则,key 兼容折算成 2 BPM 的优势作次级偏好。
+   从最低 BPM 起步做贪心链,天然形成"速度由慢到快"的爬升,并让相邻差尽量落在 20 以内。 */
+function autoSortTracks(){
+  const withBpm=tracks.filter(t=>t.bpm), noBpm=tracks.filter(t=>!t.bpm);
+  if(!withBpm.length) return;
+  const cost=(a,b)=>{
+    const d=Math.abs(a.bpm-b.bpm);
+    const key=(a.key&&b.key&&camelotCompatible(a.key,b.key))? KEY_BONUS_BPM : 0;
+    return d - key + (d>MAX_PAIR_DIFF? 1000:0);   // 超过 20 的配对重罚,尽量排到最后
+  };
+  let best=null;
+  for(const start of withBpm){                    // 每个起点试一遍,取总代价最小的链
+    const used=new Set([start]), chain=[start];
+    let total=0;
+    while(chain.length<withBpm.length){
+      const last=chain[chain.length-1];
+      let pick=null, pc=Infinity;
+      for(const t of withBpm){ if(used.has(t)) continue;
+        const c=cost(last,t); if(c<pc){ pc=c; pick=t; } }
+      if(!pick) break;
+      chain.push(pick); used.add(pick); total+=pc;
+    }
+    if(!best || total<best.total) best={chain,total};
+  }
+  // 让链从较慢的一端开始(速度爬升比骤降自然)
+  let chain=best.chain;
+  if(chain[0].bpm>chain[chain.length-1].bpm) chain=[...chain].reverse();
+  tracks.length=0; tracks.push(...chain, ...noBpm);
+}
+function maybeAutoSort(){ // 分析完毕且用户未自定义时,自动应用推荐排序
+  if(userCustomized || tracks.length<2 || tracks.some(t=>t.analyzing)) return;
+  autoSortTracks(); renderList();
+}
+$("sortBtn").addEventListener("click", ()=>{
+  stopSet(); stopPreview();
+  userCustomized=false;
+  autoSortTracks(); renderList();
+});
+
+/* ---------- 单曲试听(支持点击波形跳转) ---------- */
+let preview = null; // {src, id, offset, ctxStart, dur}
+let pvRaf = 0;
+function stopPreview(){
+  if(!preview) return;
+  const p=preview; preview=null; cancelAnimationFrame(pvRaf);
+  try{ p.src.onended=null; p.src.stop(); }catch(e){}
+  document.querySelectorAll(".pv").forEach(b=>{ b.textContent="▶"; b.classList.remove("on"); });
+  document.querySelectorAll(".wprog").forEach(n=>n.style.display="none");
+}
+function startPreview(t, offset, btn){
+  ensureCtx(); ctx.resume(); stopSet(); stopPreview();
+  offset = Math.min(Math.max(offset,0), Math.max(t.dur-0.05,0));
+  const src=ctx.createBufferSource(); src.buffer=t.buffer;
+  const g=ctx.createGain(); g.gain.value=.9*gainOf(t);
+  const eq=makeBandEQ(ctx, bandCorrection(t));
+  src.connect(g); g.connect(eq.input); eq.output.connect(ctx.destination);
+  src.onended=()=>stopPreview();
+  src.start(0, offset);
+  preview={src, id:t.id, offset, ctxStart:ctx.currentTime, dur:t.dur};
+  if(btn){ btn.textContent="■"; btn.classList.add("on"); }
+  pvRaf=requestAnimationFrame(pvTick);
+}
+function togglePreview(t, btn){
+  if(preview && preview.id===t.id){ stopPreview(); return; }
+  startPreview(t, 0, btn);
+}
+function pvTick(){
+  if(!preview) return;
+  const bar = document.querySelector(`.track[data-tid="${preview.id}"] .wprog`);
+  if(bar){
+    const f = Math.min((preview.offset + ctx.currentTime - preview.ctxStart)/preview.dur, 1);
+    bar.style.display="block"; bar.style.left=(f*100)+"%";
+  }
+  pvRaf=requestAnimationFrame(pvTick);
+}
+
+let dragIdx = null;
+document.addEventListener("dragend", ()=>{ dragIdx=null; document.querySelectorAll(".track.dragging").forEach(n=>n.classList.remove("dragging")); });
+function renderList(){
+  const list=$("list"); list.innerHTML="";
+  $("emptyHint").style.display = tracks.length? "none":"block";
+  $("genBtn").disabled = tracks.length===0;
+  tracks.forEach((t,i)=>{
+    const el=document.createElement("div");
+    el.className="track"; el.draggable=true; el.dataset.i=i; el.dataset.tid=t.id;
+    el.innerHTML = `<span class="grip">⠿</span><span class="idx">${String(i+1).padStart(2,"0")}</span>
+      <span class="wavewrap"><canvas class="wave"></canvas><span class="secstrip"></span><i class="wcur"></i><i class="wprog"></i></span>
+      <div class="meta"><div class="name"></div><div class="dur"><span>${fmt(t.dur)}</span><span class="chips" style="display:flex;gap:5px"></span></div></div>
+      <button class="pv" title="试听">▶</button>
+      <button class="rm" title="移除">✕</button>`;
+    el.querySelector(".name").textContent = t.name;
+    const chips=el.querySelector(".chips");
+    chips.appendChild(makeChip(t,"key")); chips.appendChild(makeChip(t,"bpm"));
+    if($("normalize").checked && t.gain){
+      const db=20*Math.log10(t.gain), gl=document.createElement("span");
+      gl.textContent=(db>=0?"+":"")+db.toFixed(1)+"dB";
+      gl.title="整体响度增益";
+      gl.style.cssText="font-family:var(--mono);font-size:9px;color:"+(db>=0?"#3ddc84":"#ff7ab8");
+      chips.appendChild(gl);
+      const corr=bandCorrection(t), lbl=["L","M","H"], tip=["低频 <250Hz","中频 250Hz–4kHz","高频 4k–16kHz"];
+      corr.forEach((d,bi)=>{
+        if(Math.abs(d)<0.5) return; // 修正很小就不显示
+        const s=document.createElement("span");
+        s.textContent=lbl[bi]+(d>=0?"+":"")+d.toFixed(1);
+        s.title=tip[bi]+" 均衡修正 (dB)";
+        s.style.cssText="font-family:var(--mono);font-size:9px;color:"+(d>=0?"#3ddc84":"#ff7ab8");
+        chips.appendChild(s);
+      });
+    }
+    const pvBtn = el.querySelector(".pv");
+    if(preview && preview.id===t.id){ pvBtn.textContent="■"; pvBtn.classList.add("on"); }
+    pvBtn.addEventListener("click", ()=>togglePreview(t, pvBtn));
+    const strip=el.querySelector(".secstrip");
+    if(t.sections) t.sections.forEach(sec=>{
+      const sp=document.createElement("i");
+      sp.style.width=((sec.e-sec.s)/t.dur*100)+"%";
+      sp.style.background=SEC_COLORS[sec.label]||"#555";
+      sp.title=`${sec.label} ${fmt(sec.s)}–${fmt(sec.e)}`;
+      strip.appendChild(sp);
+    });
+    const ww = el.querySelector(".wavewrap"), wcur = ww.querySelector(".wcur");
+    ww.addEventListener("mousemove", e=>{
+      const r=ww.getBoundingClientRect(), x=Math.min(Math.max(e.clientX-r.left,0),r.width);
+      wcur.style.display="block"; wcur.style.left=x+"px";
+      ww.title = fmt(x/r.width*t.dur);
+    });
+    ww.addEventListener("mouseleave", ()=>{ wcur.style.display="none"; });
+    ww.addEventListener("mousedown", e=>e.stopPropagation());
+    ww.addEventListener("click", e=>{
+      const r=ww.getBoundingClientRect(), frac=Math.min(Math.max((e.clientX-r.left)/r.width,0),1);
+      startPreview(t, frac*t.dur, pvBtn);
+    });
+    el.querySelector(".rm").addEventListener("click", ()=>{ stopSet(); stopPreview(); tracks.splice(i,1); renderList(); });
+    el.addEventListener("dragstart", ()=>{ dragIdx=i; el.classList.add("dragging"); });
+    el.addEventListener("dragend", ()=>{ dragIdx=null; el.classList.remove("dragging"); });
+    el.addEventListener("dragover", e=>{
+      e.preventDefault();
+      if(dragIdx===null||dragIdx===i) return;
+      stopSet(); userCustomized=true;
+      const [m]=tracks.splice(dragIdx,1); tracks.splice(i,0,m); dragIdx=i;
+      renderList();
+    });
+    list.appendChild(el);
+    requestAnimationFrame(()=>drawWave(el.querySelector(".wave"), t.peaks, "rgba(0,229,255,.75)", gainOf(t)));
+    if(i<tracks.length-1){ // 相邻两曲的衔接指示
+      const b2=tracks[i+1], link=document.createElement("div"); link.className="link";
+      let keyTxt="KEY ?", cls="";
+      if(t.analyzing||b2.analyzing){ keyTxt="…"; }
+      else if(t.key&&b2.key){ const ok=camelotCompatible(t.key,b2.key); keyTxt=`${t.key}→${b2.key} ${ok?"✓":"✗"}`; cls=ok?"good":"bad"; }
+      let bpmTxt="", bpmCls="";
+      if(t.bpm&&b2.bpm){
+        const d=Math.abs(t.bpm-b2.bpm), T=pairTarget(t.bpm,b2.bpm);
+        if(T==null){ bpmTxt=`BPM 差 ${d.toFixed(1)} > ${MAX_PAIR_DIFF} ✗ 无法 beatmatch`; bpmCls="bad"; }
+        else if(d<=2) bpmTxt=`BPM ${t.bpm} ≈ ${b2.bpm}`;
+        else bpmTxt=`BPM ${t.bpm} → ${T} ← ${b2.bpm}(各变 ${Math.abs(T-t.bpm).toFixed(1)}/${Math.abs(T-b2.bpm).toFixed(1)})`;
+      }
+      link.innerHTML=`<i></i><span class="${cls}"></span><span class="${bpmCls}"></span><i></i>`;
+      link.children[1].textContent=keyTxt; link.children[2].textContent=bpmTxt;
+      list.appendChild(link);
+    }
+  });
+  // 推荐排序提示条
+  const rb=$("recobar");
+  if(tracks.length<2) rb.style.display="none";
+  else{
+    rb.style.display="block";
+    if(tracks.some(t=>t.analyzing)){ rb.className=""; rb.textContent="⏳ 正在分析 Key / BPM,完成后将自动应用系统推荐排序…"; }
+    else if(userCustomized){ rb.className=""; rb.textContent="✋ 当前为自定义顺序 — 点 ⚡ AUTO SORT 可恢复系统推荐"; }
+    else{ rb.className="ok"; rb.textContent="✦ 已应用系统推荐排序(Rule 1:Camelot Key 兼容链 · Rule 2:BPM 就近)— 拖拽卡片可自定义,满意后点『生成 DJ SET』"; }
+  }
+  updateSteps();
+}
+function updateSteps(){
+  const stage = tracks.length===0? 1 : (schedule? 3 : 2);
+  [1,2,3].forEach(s=>$("st"+s).classList.toggle("on", s===stage));
+}
+
+/* ---------- 生成 DJ Set ---------- */
+$("normalize").addEventListener("change", ()=>{ renderList(); if(schedule) renderTimeline(); }); // 波形显示随均衡开关刷新
+$("beatBtn").addEventListener("click", buildBeatGrids);
+/* 配置签名:用于检测与已生成 Set 相比,参数/曲目/顺序是否变化 */
+function currentMeta(){
+  return {
+    ovl: $("ovlSel").value,
+    bassSwap: $("bassSwap").checked,
+    align: $("tempoAlign").checked,
+    norm: $("normalize").checked,
+    mode: $("mixMode").value,
+    ids: tracks.map(t=>t.id),
+    bpms: tracks.map(t=>t.bpm)
+  };
+}
+function metaDiff(oldM, newM){
+  const msgs=[];
+  if(oldM.ovl!==newM.ovl) msgs.push("过渡长度");
+  if(oldM.bassSwap!==newM.bassSwap) msgs.push("BASS SWAP 开关");
+  if(oldM.align!==newM.align) msgs.push("BPM ALIGN 开关");
+  if(oldM.norm!==newM.norm) msgs.push("音量均衡开关");
+  if(oldM.mode!==newM.mode) msgs.push("接歌方式");
+  const so=new Set(oldM.ids), sn=new Set(newM.ids);
+  const added=newM.ids.filter(x=>!so.has(x)).length;
+  const removed=oldM.ids.filter(x=>!sn.has(x)).length;
+  if(added) msgs.push(`新增 ${added} 首`);
+  if(removed) msgs.push(`移除 ${removed} 首`);
+  if(!added && !removed && oldM.ids.join()!==newM.ids.join()) msgs.push("顺序调整");
+  if(oldM.ids.join()===newM.ids.join() && oldM.bpms.join()!==newM.bpms.join()) msgs.push("BPM 修改");
+  return msgs;
+}
+$("genBtn").addEventListener("click", async ()=>{
+  const btn=$("genBtn"), note=$("genNote");
+  if(tracks.some(t=>t.analyzing)){ btn.textContent="等待分析完成…"; setTimeout(()=>btn.textContent="✓ 顺序满意 · 生成 DJ SET",1200); return; }
+  const meta=currentMeta();
+  if(schedule && metaDiff(schedule.meta, meta).length===0){
+    note.textContent="⟳ 检测:配置与当前 Set 完全一致 — 无需重新生成,从头播放";
+    startSet();
+    $("deck").scrollIntoView({behavior:"smooth", block:"nearest"});
+    return;
+  }
+  const changes = schedule? metaDiff(schedule.meta, meta) : null;
+  btn.disabled=true;
+  try{
+    await buildSchedule((i,n)=>{ btn.textContent=`⏳ TEMPO ALIGN ${i+1}/${n}…`; });
+    note.textContent = changes? `✦ 检测到变更:${changes.join(" · ")} — 已重新生成` : "✦ 已生成";
+    renderTimeline(); startSet();
+  }catch(err){ console.error("[生成失败]", err); note.textContent="生成失败:"+(err&&err.message? err.message:String(err))+"(详情见 F12 Console)"; }
+  btn.textContent="✓ 顺序满意 · 生成 DJ SET"; btn.disabled=false;
+});
+
+/* ---------- WSOLA time-stretch(变速不变调) ----------
+   rate = 输入消耗速度:>1 加速(音频变短),<1 减速。线性渐变 r0→r1。 */
+async function stretchRamp(buffer, tIn0, tIn1, r0, r1){
+  const sr=buffer.sampleRate;
+  const s0=Math.max(0,Math.floor(tIn0*sr)), s1=Math.min(buffer.length,Math.floor(tIn1*sr));
+  const nCh=buffer.numberOfChannels, N=s1-s0;
+  if(N<=0){ // 区间为空/倒置:返回空段,避免 new Float32Array(负数) 抛异常
+    const ch=[]; for(let c=0;c<nCh;c++) ch.push(new Float32Array(0));
+    return {length:0, ch};
+  }
+  if(Math.abs(r0-1)<0.0001 && Math.abs(r1-1)<0.0001){ // 仅在严格恒等时才走无损切片(0.3% 阈值曾导致 1/4 拍漂移)
+    const ch=[]; for(let c=0;c<nCh;c++) ch.push(buffer.getChannelData(c).slice(s0,s1));
+    return {length:N, ch};
+  }
+  const chIn=[]; for(let c=0;c<nCh;c++) chIn.push(buffer.getChannelData(c).subarray(s0,s1));
+  const mono=new Float32Array(N);
+  for(let i=0;i<N;i++){ let s=0; for(let c=0;c<nCh;c++) s+=chIn[c][i]; mono[i]=s/nCh; }
+  const FR=4096, HOP=2048, SEEK=600, CORR=400;
+  const win=new Float32Array(FR); for(let i=0;i<FR;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/FR);
+  const outCap=Math.ceil(N/Math.min(r0,r1))+FR*2;
+  const chOut=[]; for(let c=0;c<nCh;c++) chOut.push(new Float32Array(outCap));
+  let inPos=0, outPos=0, prevPos=0, endOut=0, fc=0;
+  for(;;){
+    const r=r0+(r1-r0)*Math.min(inPos/Math.max(N-FR,1),1);
+    let base=Math.round(inPos);
+    if(outPos>0){ // 波形对齐:在 nominal 附近找与上一帧自然延续最相关的位置
+      const target=prevPos+HOP;
+      if(target+CORR<N){
+        let best=-1e18,bo=base;
+        const lo=Math.max(0,base-SEEK), hi=Math.min(N-FR,base+SEEK);
+        for(let cand=lo;cand<=hi;cand+=4){
+          let s=0; for(let k=0;k<CORR;k+=2) s+=mono[cand+k]*mono[target+k];
+          if(s>best){best=s;bo=cand;}
+        }
+        base=bo;
+      }
+    }
+    if(base+FR>N) break;
+    for(let c=0;c<nCh;c++){
+      const d=chOut[c], src=chIn[c];
+      for(let i=0;i<FR;i++) d[outPos+i]+=src[base+i]*win[i]; // Hann 50% OLA 增益恒定
+    }
+    endOut=outPos+FR; prevPos=base; outPos+=HOP; inPos+=HOP*r;
+    if(++fc%120===0) await new Promise(res=>setTimeout(res)); // 让出主线程
+  }
+  return { length:endOut, ch:chOut.map(a=>a.subarray(0,endOut)) };
+}
+
+function spliceConcat(parts){ // 段间 2048 采样线性交叉消咔哒;返回每段在输出中的起点(供节拍参考点换算)
+  const SP=2048;
+  let cap=parts.reduce((a,p)=>a+p.length,0);
+  const out=new Float32Array(cap); let o=0;
+  const starts=[];
+  parts.forEach((p,idx)=>{
+    if(idx===0){ out.set(p,0); starts.push(0); o=p.length; return; }
+    const xf=Math.min(SP,p.length,o);
+    starts.push(o-xf);
+    for(let i=0;i<xf;i++){ const w=i/xf; out[o-xf+i]=out[o-xf+i]*(1-w)+p[i]*w; }
+    out.set(p.subarray(xf), o); o+=p.length-xf;
+  });
+  return {arr:out.subarray(0,o), starts};
+}
+
+/* 高精度本地 BPM:两点 downbeat 跨距测量。
+   自相关精度上限 ±0.1~0.3%,不足以支撑长 overlap 的 beatmatch(0.3%×40s≈1/4 拍)。
+   改为:锁定区域起点 downbeat A,再锁 K 小节外的 downbeat B,真拍长=(B−A)/(4K)。
+   两段式(8 小节修种子 → 32 小节精测)防止种子误差导致 B 锁错整拍。
+   最后吸附整数/半整数网格(DAW 音乐 BPM 几乎总是精确整数),测量噪声归零。 */
+function preciseLocalBPM(t, from, to, seed){
+  if(!seed) return seed;
+  let bpm=seed;
+  for(const K of [8, 32]){
+    const bar=240/bpm;
+    const lo=Math.max(from, 0), hi=Math.min(to, t.dur);
+    if(hi-lo < 6*bar) break;
+    const a=refineDownbeat(t, lo+bar, bpm);
+    const k=Math.min(K, Math.floor((hi-a-bar)/bar));
+    if(k<4) break;
+    const b=refineDownbeat(t, a+k*bar, bpm);
+    const est=240*k/(b-a);
+    if(isFinite(est) && Math.abs(est/bpm-1)<0.04) bpm=est;
+  }
+  const rInt=Math.round(bpm), rHalf=Math.round(bpm*2)/2;
+  if(Math.abs(bpm-rInt)<0.12) bpm=rInt;
+  else if(Math.abs(bpm-rHalf)<0.06) bpm=rHalf;
+  return bpm;
+}
+
+/* 闭环校正核心(0.96):两首【已渲染】音轨的 onset 包络互相关。
+   不做任何节拍识别——直接量"出歌与入歌的相对位移",正是耳朵听到的量。
+   前后半段各测一次:位移之差=漂移速率,位移本身=静态错位。
+   (0.94 的两点 downbeat 测速已废弃:four-on-floor 每拍等强,两点可能落在不同拍号上,
+    除以跨距后凭空产生 0.5~0.8% 假残差,照此修正反而制造漂移。) */
+const ENV_HOP=256;
+function onsetEnvOf(buffer, from, to){
+  const sr=buffer.sampleRate, ch=buffer.getChannelData(0);
+  const i0=Math.max(0,Math.floor(from*sr)), i1=Math.min(buffer.length, Math.floor(to*sr));
+  const n=Math.max(0, Math.floor((i1-i0)/ENV_HOP));
+  const a=new Float32Array(n);
+  let prev=0;
+  for(let k=0;k<n;k++){
+    const s=i0+k*ENV_HOP; let e=0;
+    for(let j=0;j<ENV_HOP;j+=2){ const v=ch[s+j]; e+=v*v; }
+    e=Math.sqrt(e);
+    a[k]=Math.max(0,e-prev); prev=e;
+  }
+  let m=0; for(let i=0;i<n;i++) m+=a[i]; m/=(n||1);
+  for(let i=0;i<n;i++) a[i]-=m;
+  return a;
+}
+/* 返回 b 相对 a 的滞后(帧);正值 = b 的击点比 a 晚 */
+function bestLagFrames(a,b,maxLag){
+  const n=Math.min(a.length,b.length);
+  if(n<20) return null;
+  let best=-Infinity, bl=0;
+  for(let L=-maxLag;L<=maxLag;L++){
+    let s=0,na=0,nb=0;
+    const i0=Math.max(0,-L), i1=Math.min(n, n-L);
+    for(let i=i0;i<i1;i++){ const x=a[i], y=b[i+L]; s+=x*y; na+=x*x; nb+=y*y; }
+    const d=Math.sqrt(na*nb);
+    if(d<=0) continue;
+    const v=s/d;
+    if(v>best){ best=v; bl=L; }
+  }
+  return {lag:bl, score:best};
+}
+/* 单轨实测节拍周期:瞬态检测 + 最小二乘拟合(已在 Node 中验证 0.0001% 精度)。
+   不依赖两曲互相关——不同曲目节奏型差异大时互相关会失效并被跳过,那正是此前校正静默失灵的原因。 */
+function measureRenderedBeat(buf, from, to, targetBpm){
+  const P0=60/targetBpm;
+  const ons=transientsIn(buf, Math.max(0,from), Math.min(buf.length/buf.sampleRate, to));
+  if(ons.length<8) return null;
+  const t=ons.map(o=>o.t), w=ons.map(o=>o.v), T0=t[0];
+  /* 1) 梳状搜索:周期 ±10% 全扫 + 相位全扫,取加权命中最高
+        (不以目标周期为初值——实际速率偏离目标较多时,直接拟合会错配拍索引) */
+  let bP=P0,bPh=0,bSc=-1;
+  const tol=0.035;
+  for(let P=P0*0.90; P<=P0*1.10; P+=P0*0.0008){
+    for(let ph=0; ph<P; ph+=P/24){
+      let sc=0;
+      for(let i=0;i<t.length;i++){
+        const x=(t[i]-T0-ph)/P, d=Math.abs(x-Math.round(x));
+        if(d<tol) sc+=w[i];
+      }
+      if(sc>bSc){ bSc=sc; bP=P; bPh=ph; }
+    }
+  }
+  /* 2) 最小二乘精修(剔除 off-beat 装饰音) */
+  let P=bP, t0=T0+bPh, frac=0, cnt=0;
+  for(let it=0; it<6; it++){
+    const keep=[];
+    for(let i=0;i<t.length;i++){
+      const k=Math.round((t[i]-t0)/P);
+      if(Math.abs(t[i]-(t0+k*P))<P*0.12) keep.push([k,t[i]]);
+    }
+    if(keep.length<5) return null;
+    let n=keep.length,sx=0,sy=0,sxy=0,sxx=0;
+    for(const [x,y] of keep){sx+=x;sy+=y;sxy+=x*y;sxx+=x*x;}
+    const den=n*sxx-sx*sx; if(Math.abs(den)<1e-12) return null;
+    const sl=(n*sxy-sx*sy)/den, ic=(sy-sl*sx)/n;
+    if(!isFinite(sl)||sl<=0) return null;
+    P=sl; t0=ic; frac=keep.length/t.length; cnt=keep.length;
+  }
+  if(Math.abs(P/P0-1)>0.12 || frac<0.3 || cnt<6) return null;
+  return {period:P, bpm:60/P, n:cnt, frac};
+}
+
+/* 量两轨在 win 秒窗口内的静态错位与漂移速率 */
+function measureAlign(bufA, tA, bufB, tB, win, beatSec){
+  const sr=bufA.sampleRate, maxLag=Math.round(beatSec*0.5*sr/ENV_HOP);
+  const half=win/2;
+  const r=(off,len)=>{
+    const ea=onsetEnvOf(bufA, tA+off, tA+off+len);
+    const eb=onsetEnvOf(bufB, tB+off, tB+off+len);
+    return bestLagFrames(ea,eb,maxLag);
+  };
+  const r1=r(0,half), r2=r(half,half);
+  const whole=r(0,win);
+  if(!r1||!r2||!whole) return null;
+  const f2s=ENV_HOP/sr;
+  return {
+    offset: whole.lag*f2s,                    // 静态错位(秒),正=入歌偏晚
+    slope: (r2.lag-r1.lag)*f2s/half,          // 漂移速率(秒/秒),正=入歌偏慢
+    score: Math.min(r1.score,r2.score,whole.score)
+  };
+}
+
+/* 就地精确锁定 downbeat:在 approx 附近 ±半小节逐 5.8ms 搜索,
+   以后续 16 拍 onset 加权和(强拍×2)最大者为准——避免全曲相位外推的累积误差 */
+function refineDownbeat(t, approx, bpmL){
+  if(t.beats){ const g=gridDownbeat(t, approx); if(g!=null) return g; } // 有真实网格就用它
+  return refineDownbeatBuf(t.buffer, approx, bpmL||t.bpmExact||t.bpm);
+}
+/* 用真实网格测区间内的平均拍长 → 本地 BPM(无需任何估计/自相关) */
+function gridLocalBPM(t, from, to){
+  if(!t.beats) return null;
+  const g=t.beats;
+  let i0=nearestBeatIdx(t, from), i1=nearestBeatIdx(t, to);
+  if(i1-i0<8) return null;
+  // 用首尾拍的跨距求平均拍长(逐拍网格上无认错拍风险)
+  return 60*(i1-i0)/(g[i1]-g[i0]);
+}
+function refineDownbeatBuf(buffer, approx, bpmUse){
+  if(!bpmUse) return approx;
+  const sr=buffer.sampleRate, ch=buffer.getChannelData(0), hop=256;
+  const dur=buffer.length/sr;
+  const beat=60/bpmUse, bar=4*beat;
+  const from=Math.max(0, approx-bar), to=Math.min(dur, approx+bar*5);
+  const i0=Math.floor(from*sr/hop), i1=Math.floor(to*sr/hop);
+  const env=[]; let prev=0;
+  for(let i=i0;i<i1;i++){
+    const s=i*hop; let e=0;
+    for(let j=0;j<hop;j+=4){ const v=ch[s+j]||0; e+=v*v; }
+    e=Math.sqrt(e); env.push(Math.max(0,e-prev)); prev=e;
+  }
+  const fs=sr/hop;
+  let best=-1, bestT=approx;
+  for(let off=-bar/2; off<bar/2; off+=hop/sr){
+    const cand=approx+off; if(cand<from) continue;
+    let s=0;
+    for(let k=0;k<16;k++){
+      const idx=Math.round((cand+k*beat-from)*fs);
+      if(idx>=0&&idx<env.length) s+=env[idx]*(k%4===0?2:1);
+    }
+    if(s>best){best=s;bestT=cand;}
+  }
+  return bestT;
+}
+
+/* 生成处理后音轨:头/尾结构 = 恒速平台(在目标 BPM,覆盖整个 crossfade)+ 渐变段。
+   平台段内节拍周期恒定,配合 beat grid 参考点可做相位对齐(消除"跑马")。
+   返回 {buf, inRef, outRef}:inRef=头部平台内第一条小节线在输出中的时刻;
+   outRef=尾部平台内最后一条小节线在输出中的时刻;null=无法对齐 */
+/* ===== 逐拍同步内核(1.0)=====
+   用 Essentia 的逐拍时间戳,把每个节拍间隔单独拉伸到恰好 B 秒。
+   输出中第 i 拍必然落在 i*B —— 每拍都被钉死,漂移在数学上无法累积。
+   已在 Node 验证:对速度本身漂移的素材,渲染后每拍偏离网格 <2.7ms 且不累积。 */
+const ATTACK_SEC=0.045;        // 每拍起音保护长度
+const OLA_XF=128;              // 拉伸段接缝交叉过渡长度
+const BEAT_XF=24;              // 拍首交叉必须远短于起音(kick 峰值在前 ~100 采样内),
+                               // 用 128 会把峰值削掉近一半、并使拍位置偏移变大
+const OLA_MARGIN_SEC=4096/44100; // ≈93ms:WSOLA 首末帧必然带窗淡变,渲染时留边、事后裁掉
+/* seq(可选):每个输出拍要取的源区间 [start,end],用于 LOOP —— 允许重复同一段素材。
+   不传时行为与原先完全一致(逐拍取 beats[k0+i]..beats[k0+i+1])。
+   注意:无论 seq 如何,第 i 拍仍被拉伸到恰好 B 秒并写在 i*L —— 逐拍钉死的时序不变量不受影响。 */
+async function renderBeatSynced(buffer, beats, k0, k1, B, seq){
+  const sr=buffer.sampleRate, nCh=buffer.numberOfChannels;
+  const L=Math.round(B*sr), n=seq? seq.length : Math.max(0,k1-k0), dur=buffer.length/sr;
+  const out=[]; for(let c=0;c<nCh;c++) out.push(new Float32Array(n*L+OLA_XF));
+  const aLen=Math.min(Math.round(ATTACK_SEC*sr), Math.floor(L*0.5));
+  for(let i=0;i<n;i++){
+    const s=seq? seq[i][0] : beats[k0+i], e=seq? seq[i][1] : beats[k0+i+1];
+    if(!(e>s)) continue;
+    if(!((e-s)/B>0.5&&(e-s)/B<2)) continue;      // 异常拍(检测跳拍)跳过,保持网格不动
+    /* ① 瞬态保留:起音段原样复制,只拉伸尾部(WSOLA 的 Hann 窗会吃掉每拍开头 46ms,
+          正是 kick 爆发点;实测起音陡度损失 95%、峰值损失 80%)。
+       ② 留边渲染:WSOLA 每次调用的输出首尾各有约 46ms 窗淡变,逐拍调用会在每拍造成
+          "起音后 25ms 电平塌陷 + 拍尾 13ms 静音"的周期性 chop。故向源两侧各多取一个
+          OLA 边距渲染,再按精确偏移裁出所需部分,把带淡变的边缘丢弃。
+       ③ 拍间不再淡到零,改为与相邻拍交叉过渡,消除低频相位断裂造成的 bass 爆音。
+       注意:以上只改"取样边界",逐拍钉死的时序(第 i 拍落在 i×B)完全不变。 */
+    const s0=Math.floor(s*sr);
+    const restS=s+aLen/sr, slot=L-aLen, restOutLen=slot+OLA_XF;
+    let seg=null, off=0;
+    if(e>restS+0.005 && slot>0){
+      const r=(e-restS)/(slot/sr);
+      if(r>0.4&&r<2.5){
+        const a=Math.max(0, restS-OLA_MARGIN_SEC*r), b=Math.min(dur, e+OLA_MARGIN_SEC*r);
+        seg=await stretchRamp(buffer, a, b, r, r);
+        off=Math.round((restS-a)/r*sr);          // 所需内容在留边输出中的起点
+      }
+    }
+    for(let c=0;c<nCh;c++){
+      const src=buffer.getChannelData(c), dst=out[c], base=i*L;
+      // 起音原样复制(多写 OLA_XF 供后续交叉);与上一拍的尾部交叉,而非淡到零
+      for(let j=0;j<aLen+OLA_XF && s0+j<src.length; j++){
+        const v=src[s0+j];
+        dst[base+j] = j<BEAT_XF ? dst[base+j]*(1-j/BEAT_XF)+v*(j/BEAT_XF) : v;
+      }
+      if(seg){
+        const sc=seg.ch[Math.min(c,seg.ch.length-1)];
+        const cnt=Math.min(restOutLen, Math.max(0, sc.length-off));
+        for(let j=0;j<cnt;j++){
+          const v=sc[off+j], p=base+aLen+j;
+          dst[p] = j<OLA_XF ? dst[p]*(1-j/OLA_XF)+v*(j/OLA_XF) : v;
+        }
+      }
+    }
+    if(i%16===0) await new Promise(r2=>setTimeout(r2));
+  }
+  return {ch:out.map(a=>a.subarray(0,n*L)), length:n*L};
+}
+/* ---------- LOOP:素材不够长时,循环一段纯鼓乐句把过渡撑开 ----------
+   CDJ/rekordbox 的 auto loop 就是干这个:intro 太短来不及混,就在 intro 上打 8 小节循环。
+   我们有逐拍网格,所以循环点天然落在拍上、天然对齐,只需极短交叉防咔哒。
+   安全阀:只循环 INTRO/OUTRO/BREAK 段(纯鼓/铺垫,循环不易被察觉),
+   VERSE/DROP/BUILD 有旋律或推进感,循环会"一听就是在循环",不做。 */
+const LOOP_BARS=8, LOOP_MAX_REPEATS=3;
+function labelAt(t, time){
+  const s=t.sections; if(!s) return null;
+  const f=s.find(x=>time>=x.s&&time<x.e); return f? f.label:null;
+}
+function loopSafe(t, time){
+  const l=labelAt(t,time);
+  return l==="INTRO"||l==="OUTRO"||l==="BREAK";
+}
+/* 构建拍序列:先用自然素材,不够则循环最后 LOOP_BARS 小节补足 */
+function buildBeatSeq(t, k0, kEnd, needBeats){
+  const g=t.beats, seq=[];
+  for(let k=k0;k<kEnd && seq.length<needBeats;k++){
+    if(g[k+1]>g[k]) seq.push([g[k],g[k+1]]);
+  }
+  if(seq.length>=needBeats || !seq.length) return {seq, looped:0};
+  const L=LOOP_BARS*4;
+  if(seq.length<L+4) return {seq, looped:0};                     // 素材本身不足一个循环乐句
+  const loopStart=seq[seq.length-L][0];
+  if(!loopSafe(t, loopStart)) return {seq, looped:0};             // 该段不适合循环(有旋律/人声)
+  const loop=seq.slice(seq.length-L);
+  let reps=0;
+  while(seq.length<needBeats && reps<LOOP_MAX_REPEATS){
+    for(const iv of loop){ if(seq.length>=needBeats) break; seq.push(iv); }
+    reps++;
+  }
+  return {seq, looped:reps};
+}
+
+/* 找 ≥/≈ 某时刻的 downbeat 拍索引 */
+function dbIndexNear(t, time){
+  const g=t.beats, ph=t.downbeatPhase||0;
+  if(!g||!g.length) return null;
+  let i=nearestBeatIdx(t, time), best=null, bd=Infinity;
+  for(let k=-8;k<=8;k++){
+    const j=i+k;
+    if(j<0||j>=g.length) continue;
+    if(((j-ph)%4+4)%4!==0) continue;
+    const d=Math.abs(g[j]-time);
+    if(d<bd){ bd=d; best=j; }
+  }
+  return best;
+}
+async function getProcessedBeatSync(t, Tin, Tout, cf, mode, full){
+  const key="bs|"+Tin+"|"+Tout+"|"+cf+"|"+mode+"|"+(full?"F":"P");
+  t._proc=t._proc||{};
+  if(t._proc[key]) return t._proc[key];
+  const g=t.beats, sr=t.buffer.sampleRate, nCh=t.buffer.numberOfChannels, N=g.length;
+  const secs=t.sections||[];
+  const firstDrop=secs.find(x=>x.label==="DROP");
+  const lastDrop=[...secs].reverse().find(x=>x.label==="DROP");
+  const lastBreak=[...secs].reverse().find(x=>x.label==="BREAK");
+  const RAMP=32; // 进出恒速区的渐变拍数
+
+  /* ---- 头部(入歌) ---- */
+  const headSegs=[], headSrc=[]; let inAnchor=null, inLen=null, headEndIn=0, cueIdx=null, headOutLen=0;
+  if(Tin!=null){
+    const B=60/Tin;
+    const dropModes = mode==="drop_drop"||mode==="break_drop"||mode==="build_drop";
+    let anchorIdx, leadBeats=0;
+    if(dropModes && firstDrop){
+      anchorIdx=dbIndexNear(t, firstDrop.s);
+      if(mode==="drop_drop") leadBeats=4;
+      else if(mode==="build_drop"){
+        const bd=secs.find(x=>x.label==="BUILD" && x.e>firstDrop.s-8 && x.e<firstDrop.s+8);
+        const bi=bd? dbIndexNear(t, bd.s):null;
+        leadBeats = (bi!=null && anchorIdx!=null && anchorIdx>bi)? Math.min(64, anchorIdx-bi) : 16;
+      }else leadBeats=16;
+    }else{
+      anchorIdx=dbIndexNear(t, g[t.downbeatPhase||0]);
+    }
+    if(anchorIdx==null) anchorIdx=(t.downbeatPhase||0);
+    cueIdx=Math.max(0, anchorIdx-leadBeats);
+    const need=Math.ceil(cf/B)+80;                       // 恒速跑道:覆盖 crossfade + 充足余量
+    const endIdx=Math.min(N-2, cueIdx+need);
+    if(endIdx-cueIdx<8) return null;
+    headSegs.push(await renderBeatSynced(t.buffer, g, cueIdx, endIdx, B));
+    headSrc.push([g[cueIdx], g[endIdx]]);
+    headOutLen=(endIdx-cueIdx)*Math.round(B*sr)/sr;
+    inAnchor=(anchorIdx-cueIdx)*B;
+    inLen=(endIdx-anchorIdx)*B;
+    // 渐变回原速
+    const rEnd=Math.min(N-1, endIdx+RAMP);
+    if(rEnd>endIdx+2){
+      const srcBeat=(g[rEnd]-g[endIdx])/(rEnd-endIdx);
+      headSegs.push(await stretchRamp(t.buffer, g[endIdx], g[rEnd], srcBeat/B, 1));
+      headSrc.push([g[endIdx], g[rEnd]]);
+      headEndIn=g[rEnd];
+    }else headEndIn=g[endIdx];
+  }
+
+  /* ---- 尾部(出歌) ---- */
+  const tailSegs=[]; let outAnchor=null, outLen=null, foStartOut=null, foCap=null,
+        tailRampStartIn=t.dur, tailKind="outro", tailOutStart=0;
+  if(Tout!=null){
+    const B=60/Tout;
+    let anchorIdx=null, foIdx=null, endIdx=null;
+    const half=t.dur*0.5;                                 // 硬约束:出歌锚点必须过半
+    if((mode==="drop_intro") && lastDrop && lastDrop.s>=half){
+      anchorIdx=dbIndexNear(t, lastDrop.s); foIdx=dbIndexNear(t, lastDrop.e); tailKind="dropStart";
+    }else if((mode==="drop_drop"||mode==="build_drop") && lastDrop && lastDrop.s>=half){
+      anchorIdx=dbIndexNear(t, lastDrop.e); foIdx=anchorIdx; tailKind="dropEnd";
+    }else if(mode==="break_drop" && lastBreak && lastBreak.e>=half){
+      anchorIdx=dbIndexNear(t, lastBreak.e); foIdx=anchorIdx; tailKind="breakEnd";
+    }else{
+      const outro=[...secs].reverse().find(x=>x.label==="OUTRO");
+      const at=outro? Math.max(outro.s, half) : Math.max(half, t.dur-Math.min(60, t.dur*0.3));
+      anchorIdx=dbIndexNear(t, at); foIdx=anchorIdx; tailKind="outro";
+    }
+    if(anchorIdx==null) return null;
+    const startIdx=Math.max(0, anchorIdx-4);
+    if(foIdx==null||foIdx<startIdx) foIdx=anchorIdx;
+    const need=Math.ceil(cf/B)+80;
+    endIdx=Math.min(N-2, Math.max(foIdx, anchorIdx)+need);
+    if(endIdx-startIdx<8) return null;
+    // 进入恒速区前的渐变
+    const rStart=Math.max(0, startIdx-RAMP);
+    if(startIdx-rStart>2){
+      const srcBeat=(g[startIdx]-g[rStart])/(startIdx-rStart);
+      tailSegs.push({ramp:[g[rStart], g[startIdx], 1, srcBeat/B]});
+      tailRampStartIn=g[rStart];
+    }else tailRampStartIn=g[startIdx];
+    tailSegs.push({sync:[startIdx, endIdx, B]});
+    outAnchor=(anchorIdx-startIdx)*B;                     // 相对尾部恒速段起点
+    outLen=(endIdx-anchorIdx)*B;
+    foStartOut=(foIdx-startIdx)*B;
+    foCap=(endIdx-foIdx)*B;
+  }
+
+  /* ---- 拼接 ---- */
+  const midS=Math.floor(headEndIn*sr), midE=Math.max(midS, Math.floor(tailRampStartIn*sr));
+  const rendered=[], tailSrc=[];
+  for(const s of tailSegs){
+    if(s.ramp){ rendered.push(await stretchRamp(t.buffer, s.ramp[0], s.ramp[1], s.ramp[2], s.ramp[3])); tailSrc.push([s.ramp[0], s.ramp[1]]); }
+    else { rendered.push(await renderBeatSynced(t.buffer, g, s.sync[0], s.sync[1], s.sync[2])); tailSrc.push([g[s.sync[0]], g[s.sync[1]]]); }
+  }
+  /* 预览模式只保留「头部同步段 + 尾部同步段」,不复制中间原速段:
+     过渡只用到头尾各几十秒,中段是逐采样原样复制,却让每首歌内存翻倍
+     (61 分钟歌单实测 1295MB 全长副本 → 206MB)。锚点由实际拼接位置 starts[] 推出,
+     因此对齐算法完全不受影响。导出时改用 full=true 走完整拼接。 */
+  const keepMid = full && midE>midS;
+  let starts=null, totalLen=0; const chans=[];
+  for(let c=0;c<nCh;c++){
+    const parts=[];
+    headSegs.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    if(keepMid) parts.push(t.buffer.getChannelData(c).subarray(midS,midE));
+    rendered.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    const r=spliceConcat(parts);
+    chans.push(r.arr); starts=r.starts; totalLen=r.arr.length;
+  }
+  ensureCtx();
+  const out=ctx.createBuffer(nCh, totalLen, sr);
+  for(let c=0;c<nCh;c++) out.getChannelData(c).set(chans[c]);
+  /* 精确的 源时间→输出时间 分段映射(各段速率不同,不能用均匀比例换算) */
+  const srcRanges=[...headSrc, ...(keepMid?[[headEndIn, tailRampStartIn]]:[]), ...tailSrc];
+  const segLens=[...headSegs.map(x=>x.length), ...(keepMid?[midE-midS]:[]), ...rendered.map(x=>x.length)];
+  const map=[];
+  for(let i=0;i<srcRanges.length;i++){
+    const o0=starts[i]/sr, o1=o0+segLens[i]/sr;
+    if(srcRanges[i][1]>srcRanges[i][0]+1e-6) map.push({s0:srcRanges[i][0], s1:srcRanges[i][1], o0, o1});
+  }
+  // 尾部恒速段在输出中的起点 = starts 最后一项
+  if(Tout!=null){
+    tailOutStart=starts[starts.length-1]/sr;
+    outAnchor+=tailOutStart; foStartOut+=tailOutStart;
+  }
+  const rec={buf:out, inAnchor, inLen, outAnchor, outLen, foStartOut, foCap,
+             headKind:"intro", tailKind, beatSync:true, map};
+  t._proc[key]=rec;
+  return rec;
+}
+
+/* ===== v15 过渡内核(0.992 回退)=====
+   单一 OUTRO→INTRO;头/尾各 8×8 拍对称渐变 + 恒速平台覆盖 crossfade;
+   overlap = slider 时长,取整小节;全程等功率渐变(非平台式包络)。 */
+async function getProcessedV15(t, Tin, Tout, cf){
+  const key="v15|"+Tin+"|"+Tout+"|"+cf;
+  t._proc=t._proc||{};
+  if(t._proc[key]) return t._proc[key];
+  const sr=t.buffer.sampleRate, nCh=t.buffer.numberOfChannels;
+  const bpmX=t.bpmExact||t.bpm, beat=60/bpmX, barN=4*beat;
+  const rampBeats=Math.max(4, Math.min(64, Math.floor(t.dur*0.2*bpmX/60)));
+  const rampIn=rampBeats*beat;
+  const headSegs=[]; let headEndIn=0, headPlateauIn=0, r2=1;
+  if(Tin!=null){
+    const bpmH=gridLocalBPM(t,0,Math.min(t.dur*0.6,100))||localExactBPM(t,0,Math.min(t.dur*0.5,60))||bpmX;
+    r2=Tin/bpmH;
+    const plateauOut=cf+4*60/Tin;                       // 平台 = crossfade + 1 小节余量
+    headPlateauIn=Math.min(plateauOut*r2, t.dur*0.25);
+    headEndIn=Math.min(headPlateauIn+rampIn, t.dur*0.45);
+    headSegs.push(await stretchRamp(t.buffer, 0, headPlateauIn, r2, r2));
+    headSegs.push(await stretchRamp(t.buffer, headPlateauIn, headEndIn, r2, 1));
+  }
+  const tailSegs=[]; let tailStartIn=t.dur, tailPlateauIn=0, r1=1;
+  if(Tout!=null){
+    const bpmT=gridLocalBPM(t,Math.max(0,t.dur-100),t.dur)||localExactBPM(t,Math.max(0,t.dur-60),t.dur)||bpmX;
+    r1=Tout/bpmT;
+    const plateauOut=cf+4*60/Tout;
+    tailPlateauIn=Math.min(plateauOut*r1, t.dur*0.25);
+    tailStartIn=Math.max(t.dur*0.55, t.dur-tailPlateauIn-rampIn, headEndIn);
+    tailSegs.push(await stretchRamp(t.buffer, tailStartIn, t.dur-tailPlateauIn, 1, r1));
+    tailSegs.push(await stretchRamp(t.buffer, t.dur-tailPlateauIn, t.dur, r1, r1));
+  }
+  const midS=Math.floor(headEndIn*sr), midE=Math.max(midS, Math.floor(tailStartIn*sr));
+  let starts=null, totalLen=0; const chans=[];
+  for(let c=0;c<nCh;c++){
+    const parts=[];
+    headSegs.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    parts.push(t.buffer.getChannelData(c).subarray(midS,midE));
+    tailSegs.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    const r=spliceConcat(parts);
+    chans.push(r.arr); starts=r.starts; totalLen=r.arr.length;
+  }
+  ensureCtx();
+  const out=ctx.createBuffer(nCh, totalLen, sr);
+  for(let c=0;c<nCh;c++) out.getChannelData(c).set(chans[c]);
+  const totalOut=totalLen/sr;
+  /* v15 锚点:头部平台内第一条小节线 / 尾部平台内最后一条小节线 */
+  let inAnchor=null, inLen=null, outAnchor=null, outLen=null;
+  const barDurN=4*60/bpmX;
+  const bo=(t.barOffset!=null? t.barOffset : 0);
+  if(Tin!=null && bo<headPlateauIn-0.05){
+    inAnchor=starts[0]/sr + bo/r2;
+    inLen=Math.max(0,(headPlateauIn-bo)/r2);
+  }
+  if(Tout!=null){
+    const tb=bo+Math.floor((t.dur-0.1-bo)/barDurN)*barDurN;
+    if(tb>=t.dur-tailPlateauIn+0.05){
+      const pi=starts.length-1;
+      outAnchor=starts[pi]/sr + (tb-(t.dur-tailPlateauIn))/r1;
+      outLen=totalOut-outAnchor;
+    }
+  }
+  const rec={buf:out, inAnchor, inLen, outAnchor, outLen,
+             foStartOut:null, foCap:null, headKind:"intro", tailKind:"outro"};
+  t._proc[key]=rec;
+  return rec;
+}
+
+async function getProcessed(t, Tin, Tout, cf, mode, full){
+  /* 有 Essentia 逐拍网格 → 一律走逐拍同步内核(用户要求:全程用 Essentia 节拍对齐) */
+  if(t.beats && t.beats.length>32){
+    try{
+      const r=await getProcessedBeatSync(t, Tin, Tout, cf, mode, full);
+      if(r) return r;
+      console.warn("[beat] 逐拍同步不适用(锚点/拍数不足),回退:", t.name);
+    }catch(e){ console.warn("[beat] 逐拍同步失败,回退:", t.name, e); }
+  }
+  if(mode==="v15") return getProcessedV15(t, Tin, Tout, cf);
+  const key=Tin+"|"+Tout+"|"+cf+"|"+mode;
+  t._proc=t._proc||{};
+  if(t._proc[key]) return t._proc[key];
+  const sr=t.buffer.sampleRate, nCh=t.buffer.numberOfChannels;
+  const bpmX=t.bpmExact||t.bpm;
+  const beat=60/bpmX, barN=4*beat;
+  const rampBeats=Math.max(4, Math.min(64, Math.floor(t.dur*0.15*bpmX/60)));
+  const rampIn=rampBeats*beat;
+  const secs=t.sections||[];
+  /* 恒速跑道:目标 48 小节,但一首歌头尾各需一条跑道,故上限取时长的 30%,
+     并强制头部覆盖不越过尾部起点(否则区间倒置 → 渲染异常 → "生成失败") */
+  const RUNWAY_SEC=Math.min(48*4*60/bpmX, t.dur*0.30);
+  const HEAD_MAX=t.dur*0.55;
+  const firstDrop=secs.find(x=>x.label==="DROP");
+  const lastDrop=[...secs].reverse().find(x=>x.label==="DROP");
+
+  /* ---- 头部(入歌侧):按接歌方式选 cue 点与锚点 ---- */
+  const headSegs=[]; let cueIn=0, headEndIn=0, inAnchorIn=null, inLenIn=0, r2=1, headKind="intro";
+  if(Tin!=null){
+    const dropInModes = mode==="drop_drop"||mode==="break_drop"||mode==="build_drop";
+    const wantDropIn = dropInModes && firstDrop && firstDrop.s>2*barN && firstDrop.s<t.dur*0.6;
+    if(wantDropIn){ // 锚点 = 自己第一个 DROP 起点;cue 提前量按手法不同
+      headKind="drop";
+      let bpmH=gridLocalBPM(t, Math.max(0,firstDrop.s-40), Math.min(t.dur,firstDrop.s+50));
+      if(!bpmH){
+        bpmH=localExactBPM(t, Math.max(0,firstDrop.s-30), Math.min(t.dur,firstDrop.s+30))||bpmX;
+        bpmH=preciseLocalBPM(t, Math.max(0,firstDrop.s-40), Math.min(t.dur,firstDrop.s+50), bpmH);
+      }
+      r2=Tin/bpmH;
+      console.log("[align] 入歌", t.name, "本地BPM", bpmH.toFixed(3), "rate", r2.toFixed(5));
+      const barH=4*60/bpmH;
+      const anchor=refineDownbeat(t, firstDrop.s, bpmH); // 锚点 = 自己 drop 起点 downbeat
+      let leadBars=4;                                     // break_drop:4 小节铺垫盖在出歌 break 上
+      if(mode==="drop_drop") leadBars=1;                  // drop 续接:1 小节即砸
+      else if(mode==="build_drop"){                       // buildup 进场:带完整 BUILD 段
+        const build=secs.find(x=>x.label==="BUILD" && x.e>firstDrop.s-2*barH && x.e<firstDrop.s+2*barH);
+        leadBars = build? Math.min(16, Math.max(4, Math.round((firstDrop.s-build.s)/barH))) : 4;
+      }
+      cueIn=Math.max(0, anchor-leadBars*barH);
+      // 恒速跑道:防止入歌提前滑回原速导致与出歌越跑越远
+      const coverEnd=Math.min(anchor+RUNWAY_SEC, HEAD_MAX);
+      headEndIn=Math.min(coverEnd+rampIn, HEAD_MAX+rampIn);
+      headSegs.push(await stretchRamp(t.buffer, cueIn, coverEnd, r2, r2));
+      if(headEndIn>coverEnd+0.05) headSegs.push(await stretchRamp(t.buffer, coverEnd, headEndIn, r2, 1));
+      inAnchorIn=anchor; inLenIn=coverEnd-anchor; // 跑道长度(锚点之后可用的恒速时长)
+    }else{ // 默认:INTRO 从头进,锚点 = intro 第一个 downbeat
+      let bpmH=gridLocalBPM(t, 0, Math.min(t.dur*0.6, 100));
+      if(!bpmH){
+        bpmH=localExactBPM(t, 0, Math.min(t.dur*0.5, 60))||bpmX;
+        bpmH=preciseLocalBPM(t, 0, Math.min(t.dur*0.6, 100), bpmH);
+      }
+      r2=Tin/bpmH;
+      console.log("[align] 入歌", t.name, "本地BPM", bpmH.toFixed(3), "rate", r2.toFixed(5));
+      const intro=secs.find(x=>x.label==="INTRO");
+      const introEndIn=Math.max(4*barN, Math.min(intro? intro.e : (t.barOffset||0)+16*barN, t.dur*0.4));
+      const anchor0=Math.max(0, refineDownbeat(t, t.barOffset||0, bpmH));
+      // 跑道 = max(intro 长度, RUNWAY 小节):出歌 outro/drop 可能远长于入歌 intro,
+      // 平台必须一直铺到过渡结束,否则入歌中途滑回原速 → 与出歌越跑越远(v16 起的跑马根因)
+      const coverIn=Math.min(Math.max(introEndIn+2*barN, anchor0+RUNWAY_SEC), HEAD_MAX);
+      headEndIn=Math.min(coverIn+rampIn, HEAD_MAX+rampIn);
+      headSegs.push(await stretchRamp(t.buffer, 0, coverIn, r2, r2));
+      if(headEndIn>coverIn+0.05) headSegs.push(await stretchRamp(t.buffer, coverIn, headEndIn, r2, 1));
+      inAnchorIn=Math.min(anchor0, coverIn-barN);
+      inLenIn=coverIn-inAnchorIn;
+    }
+  }
+
+  /* ---- 尾部(出歌侧):锚点硬性 ≥50% 时长(第一首必须大部分演奏完) ---- */
+  const tailSegs=[]; let tailStartIn=t.dur, plateauStartIn=t.dur, cutIn=t.dur,
+        outAnchorIn=null, foStartIn=null, r1=1, tailKind="outro";
+  if(Tout!=null){
+    let bpmT=gridLocalBPM(t, Math.max(0,t.dur-100), t.dur);
+    if(!bpmT){
+      bpmT=localExactBPM(t, Math.max(0,t.dur-60), t.dur)||bpmX;
+      bpmT=preciseLocalBPM(t, Math.max(0,t.dur-100), t.dur, bpmT);
+    }
+    r1=Tout/bpmT;
+    console.log("[align] 出歌", t.name, "本地BPM", bpmT.toFixed(3), "rate", r1.toFixed(5));
+    const barT4=4*60/bpmT;
+    const lastBreak=[...secs].reverse().find(x=>x.label==="BREAK");
+    /* 按手法选出歌方案,缺 section 逐级回退(硬约束:锚点 ≥50% 时长) */
+    let tailPlan="outro";
+    if(mode==="drop_intro" && lastDrop && lastDrop.s>=t.dur*0.5) tailPlan="dropStart";
+    else if((mode==="drop_drop"||mode==="build_drop") && lastDrop && lastDrop.s>=t.dur*0.5) tailPlan="dropEnd";
+    else if(mode==="break_drop"){
+      if(lastBreak && lastBreak.e>=t.dur*0.5) tailPlan="breakEnd";
+      else if(lastDrop && lastDrop.s>=t.dur*0.5) tailPlan="dropEnd"; // 无 break 退为 drop 续接
+    }
+    if(tailPlan==="dropStart"||tailPlan==="dropEnd"){
+      const ds=refineDownbeat(t, lastDrop.s, bpmT);                              // 末 drop 起点
+      const de=refineDownbeat(t, Math.min(lastDrop.e, t.dur-2*barT4), bpmT);     // 末 drop 终点
+      if(tailPlan==="dropStart"){ // 入歌骑 drop:对齐锚点=drop 起点;drop 放完(de)才开始淡出
+        tailKind="dropStart"; outAnchorIn=ds; foStartIn=Math.max(de, ds+barT4); cutIn=t.dur;
+      }else{ // drop 续接:对齐锚点=drop 终点,快速换手;终点后 2 小节即裁掉(不播 outro)
+        tailKind="dropEnd"; outAnchorIn=de; foStartIn=de; cutIn=Math.min(de+2*barT4, t.dur);
+      }
+      plateauStartIn=Math.max(ds-barT4, t.dur*0.45, headEndIn);
+    }else if(tailPlan==="breakEnd"){ // breakdown 演完,入歌 drop 在 break 结束 downbeat 上砸进来
+      const be=refineDownbeat(t, Math.min(lastBreak.e, t.dur-2*barT4), bpmT);
+      tailKind="breakEnd"; outAnchorIn=be; foStartIn=be; cutIn=Math.min(be+2*barT4, t.dur);
+      plateauStartIn=Math.max(be-6*barT4, t.dur*0.4, headEndIn); // 平台盖住 break 尾 6 小节,供入歌铺垫叠放
+    }else{ // 默认/回退:OUTRO 出
+      const outro=[...secs].reverse().find(x=>x.label==="OUTRO");
+      let anchor=outro? outro.s : t.dur-Math.min(16*barT4, t.dur*0.25);
+      anchor=Math.min(Math.max(anchor, t.dur*0.5), t.dur-2*barT4);
+      anchor=refineDownbeat(t, anchor, bpmT);
+      outAnchorIn=anchor; foStartIn=anchor; cutIn=t.dur;
+      plateauStartIn=Math.max(anchor-barT4, t.dur*0.45, headEndIn);
+    }
+    tailStartIn=Math.max(plateauStartIn-rampIn, headEndIn, t.dur*0.35);
+    plateauStartIn=Math.max(plateauStartIn, tailStartIn);
+    /* 头尾区域必须不重叠且尾部平台非空,否则放弃锚点走备用过渡(而不是抛异常) */
+    if(!(cutIn>plateauStartIn+0.05) || !(plateauStartIn>=tailStartIn) || !(tailStartIn>=headEndIn-1e-6)){
+      console.warn(`[align] ${t.name} 尾部区域退化(head到${headEndIn.toFixed(1)}s / tail起${tailStartIn.toFixed(1)}s / 平台${plateauStartIn.toFixed(1)}–${cutIn.toFixed(1)}s),该侧改用备用过渡`);
+      tailSegs.length=0; tailStartIn=t.dur; plateauStartIn=t.dur; cutIn=t.dur;
+      outAnchorIn=null; foStartIn=null;
+    }else{
+      tailSegs.push(await stretchRamp(t.buffer, tailStartIn, plateauStartIn, 1, r1));
+      tailSegs.push(await stretchRamp(t.buffer, plateauStartIn, cutIn, r1, r1));
+      if(outAnchorIn<plateauStartIn || foStartIn<plateauStartIn){ outAnchorIn=null; foStartIn=null; } // 退化放弃
+    }
+  }
+  const midS=Math.floor(headEndIn*sr), midE=Math.max(midS, Math.floor(tailStartIn*sr));
+  let starts=null, totalLen=0;
+  const chans=[];
+  for(let c=0;c<nCh;c++){
+    const parts=[];
+    headSegs.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    parts.push(t.buffer.getChannelData(c).subarray(midS,midE));
+    tailSegs.forEach(s=>parts.push(s.ch[Math.min(c,s.ch.length-1)]));
+    const r=spliceConcat(parts);
+    chans.push(r.arr); starts=r.starts; totalLen=r.arr.length;
+  }
+  ensureCtx();
+  const out=ctx.createBuffer(nCh, totalLen, sr);
+  for(let c=0;c<nCh;c++) out.getChannelData(c).set(chans[c]);
+  const totalOut=totalLen/sr;
+  /* 锚点/淡出窗换算到输出时间(平台内映射线性) */
+  let inAnchor=null, inLen=null, outAnchor=null, outLen=null, foStartOut=null, foCap=null;
+  if(Tin!=null && inAnchorIn!=null){
+    inAnchor = starts[0]/sr + (inAnchorIn-cueIn)/r2;
+    inLen = Math.max(0, inLenIn/r2);
+  }
+  if(Tout!=null && outAnchorIn!=null){
+    const pOut=starts[starts.length-1]/sr;
+    outAnchor = pOut + (outAnchorIn-plateauStartIn)/r1;
+    foStartOut = pOut + (foStartIn-plateauStartIn)/r1;
+    outLen = totalOut-outAnchor;
+    foCap = totalOut-foStartOut;
+  }
+  const rec={buf:out, inAnchor, inLen, outAnchor, outLen, foStartOut, foCap, headKind, tailKind};
+  t._proc[key]=rec;
+  return rec;
+}
+
+async function buildSchedule(progress, full){
+  const align = $("tempoAlign").checked;
+  const n = tracks.length;
+  const pairT=[], ovlBars=[];
+  for(let i=0;i<n-1;i++){
+    const A=tracks[i], Bt=tracks[i+1], a=A.bpm, b=Bt.bpm;
+    /* ① 节拍不稳(民谣/氛围/现场等自由速度)→ 不做 beatmatch,退回长音量淡化 */
+    const steady = isBeatSteady(A) && isBeatSteady(Bt);
+    pairT[i] = (align && steady)? pairTarget(a,b) : null;
+    if(align && a && b && pairT[i]==null)
+      (tracks[i]._noMixWhy=tracks[i]._noMixWhy||{})[i] = !steady? "节拍不稳" : `BPM 差 ${Math.abs(a-b).toFixed(1)}>20`;
+    if(align && a && b && pairT[i]==null){
+      const why = !steady? `节拍不稳(变异 ${(Math.max(beatSteadiness(A),beatSteadiness(Bt))*100).toFixed(1)}%)`
+                         : `BPM 相差 ${Math.abs(a-b).toFixed(1)} > ${MAX_PAIR_DIFF}`;
+      console.warn(`[mix] 过渡 ${i+1}→${i+2}:${why},不做变速对齐`);
+    }
+    /* ② 过渡长度按 section/key/BPM 自适应(小节) */
+    ovlBars[i]=chooseOverlapBars(A, Bt);
+  }
+  /* 每首歌的渲染跑道按它实际参与的两个过渡取最大,避免为了 32 小节的余量白渲一大段 */
+  const cfSecFor=i=>{
+    const T=pairT[i]||pairT[i-1]||tracks[i].bpm||128, barT=4*60/T;
+    const bars=Math.max(i>0? (ovlBars[i-1]||8):0, i<n-1? (ovlBars[i]||8):0, 4);
+    return Math.min(bars, MAX_OVL_BARS)*barT;
+  };
+  /* 无法 beatmatch 时的回退过渡长度(秒):按所选小节数折算成时间。
+     1.6 曾把它写死为 0,导致回退路径 overlap=0 —— 两首歌直接首尾相接、完全没有过渡。 */
+  const bpmAvg=(()=>{ const v=tracks.map(t=>t.bpm).filter(Boolean); return v.length? v.reduce((a,b)=>a+b,0)/v.length : 120; })();
+  const cf = Math.max(6, (parseInt($("ovlSel").value)||8) * 4*60/bpmAvg);
+  const mode=$("mixMode").value;
+  const items=[];
+  const mk=(t,p,buf)=>{
+    const dur=buf.length/buf.sampleRate;
+    return {track:t, buf, dur,
+      map:p?p.map:null,
+      inAnchor:p?p.inAnchor:null, inLen:p?p.inLen:null,
+      outAnchor:p?p.outAnchor:null, outLen:p?p.outLen:null,
+      foStartOut:p?p.foStartOut:null, foCap:p?p.foCap:null,
+      headKind:p?p.headKind:"intro", tailKind:p?p.tailKind:"outro",
+      mode, beatSync:!!(p&&p.beatSync),
+      start:0, cfIn:0, cfOut:0, foStart:dur};
+  };
+  let renderCount=0;
+  const render=async (i, TinAdj)=>{
+    renderCount++;
+    const Tin=i>0? (TinAdj!=null? TinAdj : pairT[i-1]) : null, Tout=i<n-1? pairT[i]:null;
+    if(Tin==null && Tout==null) return mk(tracks[i], null, tracks[i].buffer);
+    const p=await getProcessed(tracks[i], Tin, Tout, cfSecFor(i), mode, full);
+    return mk(tracks[i], p, p.buf);
+  };
+  /* 顺序处理:渲染 i → 与 i-1 做闭环速率校正(必要时按实测残差重渲 i)→ 排程该过渡 */
+  for(let i=0;i<n;i++){
+    if(progress) progress(i,n);
+    let it=await render(i);
+    if(i>0){
+      const cur=items[i-1];
+      if(pairT[i-1]!=null && cur.outAnchor!=null && it.inAnchor!=null){
+        const T=pairT[i-1], barT=4*60/T, beatT=60/T;
+        const win=Math.min(cur.outLen||0, it.inLen||0, 32*barT);
+        if(win>=8*beatT && !full){
+          /* 单轨实测:各自和目标 BPM 比,不依赖两曲互相关 */
+          const mo=measureRenderedBeat(cur.buf, cur.outAnchor, cur.outAnchor+win, T);
+          let mi=measureRenderedBeat(it.buf, it.inAnchor, it.inAnchor+win, T);
+          const rep=(tag,m)=>m? `${m.bpm.toFixed(3)}BPM(${((m.bpm/T-1)*100).toFixed(3)}%)`:"测不到";
+          console.log(`[align] 过渡 ${i}→${i+1} 目标${T}BPM 窗口${win.toFixed(0)}s · 出歌实测 ${rep("out",mo)} · 入歌实测 ${rep("in",mi)}`);
+          /* 闭环速率校正只用于"匀速拉伸"路径。逐拍同步下速率已逐拍钉死(实测残差 <0.01%),
+             再跑这个循环最多会把同一首歌重渲 3 次(共 4 份 buffer,一首 6 分钟歌每份 127MB),
+             是生成缓慢与内存爆掉的主因之一,故直接跳过。 */
+          if(mi && !(cur.beatSync && it.beatSync)){
+            let acc=1;
+            for(let k=0;k<3 && mi && Math.abs(mi.bpm/T-1)>0.0002; k++){
+              acc*=T/mi.bpm;
+              const cand=await render(i, T*acc);
+              const mm=measureRenderedBeat(cand.buf, cand.inAnchor, cand.inAnchor+win, T);
+              if(!mm) break;
+              it=cand; mi=mm;
+              console.log(`[align]   入歌第${k+1}轮 → ${mi.bpm.toFixed(3)}BPM(${((mi.bpm/T-1)*100).toFixed(3)}%)`);
+            }
+          }else if(mi){
+            console.log(`[align]   逐拍同步:跳过闭环重渲(残差 ${((mi.bpm/T-1)*100).toFixed(3)}%)`);
+          }
+          // 残余静态错位仍用互相关(仅需对齐相位,±半拍内)
+          /* 逐拍同步时锚点已精确对齐,不再叠加互相关相位微调(会把入歌推歪) */
+          const m=(cur.beatSync&&it.beatSync)? null
+                 : measureAlign(cur.buf, cur.outAnchor, it.buf, it.inAnchor, Math.min(win,8*barT), beatT);
+          if(m && m.score>0.04) it.startShift=-(m.offset||0);
+          const mo2=mo, mi2=mi;
+          it.diag={T, out:mo2? mo2.bpm:null, in:mi2? mi2.bpm:null, win,
+                   drift: (mo2&&mi2)? (mi2.bpm/mo2.bpm-1) : null,
+                   offset: m? m.offset:null};
+        }
+      }
+    }
+    items.push(it);
+    if(i>0) schedulePair(items[i-1], it, pairT[i-1], cf, ovlBars[i-1]);
+  }
+  const last=items[n-1];
+  /* 清理陈旧的 _proc 缓存:每首歌只保留本次实际使用的那一份。
+     每份全长副本对 6 分钟歌约 127MB,反复改参数重新生成会让旧副本一直被缓存引用而无法回收
+     —— 这是"生成几次之后按钮要等十秒"的直接原因。 */
+  let freed=0;
+  for(const t of tracks){
+    if(!t._proc) continue;
+    const used=items.find(it=>it.track===t);
+    for(const k of Object.keys(t._proc)){
+      if(!used || t._proc[k].buf!==used.buf){ freed++; delete t._proc[k]; }
+    }
+  }
+  console.log(`[perf] 生成完成:${n} 首歌渲染 ${renderCount} 次(理想=歌数)· 释放陈旧缓存 ${freed} 份`);
+  const sch = { items, total: last.start+last.dur, pairT, meta: currentMeta(), full:!!full };
+  if(full) return sch;
+  schedule = sch;
+}
+
+/* 排程一对:锚点重合 = 小节 1 对小节 1;淡入淡出窗口按接歌方式设定;
+   缺锚点数据时退回 slider 时长的尾部 crossfade */
+function schedulePair(cur, nxt, T, cf, ovlBars){
+      /* v15 排程:overlap = slider 时长取整小节,全程等功率渐变(无平台段、无裁尾) */
+      if(cur.mode==="v15"){
+        if(T!=null && cur.outAnchor!=null && nxt.inAnchor!=null){
+          const barT=4*60/T;
+          const s=cur.start+cur.outAnchor-nxt.inAnchor+(nxt.startShift||0);
+          let ovl=Math.min((ovlBars||8)*barT, cur.outLen-barT*0.25, nxt.inLen);
+          ovl=Math.max(barT, Math.floor(ovl/barT+1e-6)*barT);
+          cur.foStart=cur.outAnchor; cur.cfOut=Math.min(ovl, cur.dur-cur.outAnchor);
+          nxt.cfIn=ovl; nxt.start=s;
+        }else{
+          const cfNom=Math.max(2, Math.min(cf, cur.dur*0.45, nxt.dur*0.45));
+          cur.foStart=Math.max(0, cur.dur-cfNom); cur.cfOut=cfNom; nxt.cfIn=cfNom;
+          nxt.start=cur.start+cur.dur-cfNom;
+        }
+        return;
+      }
+      if(T!=null && cur.outAnchor!=null && nxt.inAnchor!=null){
+      const barT=4*60/T;
+      const s=cur.start+cur.outAnchor-nxt.inAnchor+(nxt.startShift||0); // startShift=闭环实测的残余错位补偿
+      /* 包络原则:淡入/淡出只占 overlap 两端各 ≤2 小节,中段两首歌全音量同奏(smooth 的关键) */
+      let foStart=cur.foStartOut!=null? cur.foStartOut : cur.outAnchor;
+      let fo, fi;
+      if(cur.tailKind==="dropEnd"||cur.tailKind==="breakEnd"){ // drop/break 收尾快速换手;入歌 2 小节内推满,同奏整个铺垫段
+        fo=Math.max(barT*0.5, Math.min(barT, cur.foCap||barT));
+        fi=Math.max(barT*0.5, Math.min(2*barT, nxt.inLen||barT));
+      }else if(cur.tailKind==="dropStart"){ // 入歌骑末尾 drop:2 小节推满,与 drop 全程同奏;drop 放完后 2 小节收掉
+        fo=Math.max(barT, Math.min(2*barT, cur.foCap||barT));
+        fi=Math.max(barT, Math.min(2*barT, nxt.inLen||2*barT));
+      }else{  /* OUTRO 长混:overlap = 自适应小节数(受两侧恒速跑道上限约束)。
+                 注意:1.6 之前这里用 min(跑道,64小节) 当 overlap,导致设 15s 实际混了 50s
+                 —— 跑道里 80 拍的防漂移余量被当成过渡长度用掉了。现在跑道只做上限。 */
+        const want=(ovlBars||8)*barT;
+        let ovl=Math.min(want, cur.outLen-barT*0.25, nxt.inLen||barT);
+        ovl=Math.max(barT, Math.floor(ovl/barT+1e-6)*barT);
+        const fe=Math.max(barT*0.5, Math.min(2*barT, ovl/2)); // 缘淡变宽度
+        fi=fe;
+        fo=fe; foStart=foStart+ovl-fe; // 出歌满音量播完 overlap 中段,最后 fe 收掉
+      }
+      fo=Math.min(fo, cur.dur-foStart);
+      /* 跑道校验:整个 overlap(从入歌进场到出歌淡出结束)必须落在两边的恒速平台内,
+         否则一方会中途滑回原速造成持续漂移。超出则把出歌淡出提前到跑道末端。 */
+      const overlapDur=(cur.start+foStart+fo)-s; // 全局时间轴上的 overlap 总长
+      const runway=Math.min(nxt.inLen||Infinity, (cur.outLen||Infinity));
+      if(overlapDur>runway+0.01){
+        const cut=overlapDur-runway;
+        foStart=Math.max(cur.outAnchor, foStart-cut);
+        fo=Math.min(fo, cur.dur-foStart);
+        console.warn(`[align] overlap ${overlapDur.toFixed(1)}s 超出跑道 ${runway.toFixed(1)}s,已缩短过渡`);
+      }
+      cur.foStart=foStart; cur.cfOut=fo; nxt.cfIn=fi;
+      nxt.start=s;
+      /* BASS SWAP:入歌进场时低频被切掉,到某个 downbeat 与出歌对调。
+         两条 bassline 永不同时存在 —— 跨曲风通用的一条规则,同时解决浑浊与 headroom。
+         交换点按接歌方式选:长混取 overlap 中点(对齐小节);drop 骑乘型在出歌 drop 放完时交;
+         快速换手型就在锚点上交。 */
+      {
+        const ovlDur=(cur.start+foStart+fo)-s;
+        let swap;
+        if(cur.tailKind==="dropStart") swap=cur.start+foStart;              // 出歌 drop 放完才交
+        else if(cur.tailKind==="dropEnd"||cur.tailKind==="breakEnd") swap=s; // 快速换手:锚点即交
+        else swap=s+Math.max(barT, Math.round(ovlDur/2/barT)*barT);          // 长混:中点对齐小节
+        swap=Math.min(Math.max(swap, s), cur.start+foStart+fo);
+        cur.bassOutAt=swap; nxt.bassInAt=swap;
+      }
+      console.log(`[align] overlap=${((cur.start+cur.foStart+cur.cfOut)-s).toFixed(1)}s · 跑道 出${(cur.outLen||0).toFixed(1)}s 入${(nxt.inLen||0).toFixed(1)}s`);
+    }else{
+      /* 未做 beatmatch(BPM 差过大/节拍不稳):两轨节奏对不上,全音量同奏会很难听,
+         改为全程等功率交叉淡化 —— 这也是 DJ 遇到接不了的歌时的做法。 */
+      const cfNom=Math.max(2, Math.min(cf, cur.dur*0.45, nxt.dur*0.45));
+      cur.foStart=Math.max(0, cur.dur-cfNom); cur.cfOut=cfNom; nxt.cfIn=cfNom;
+      nxt.start=cur.start+cur.dur-cfNom;
+    }
+}
+
+/* ---------- LIVE SET 时间轴(canvas,支持缩放)---------- */
+let view0=0, view1=1;   // 可视时间窗(秒)
+function viewFit(){ if(schedule){ view0=0; view1=schedule.total; drawTimeline(); } }
+function drawTimeline(){
+  if(!schedule) return;
+  const tl=$("timeline"), cv=$("tlCv"), dpr=window.devicePixelRatio||1;
+  const W=tl.clientWidth, H=tl.clientHeight;
+  cv.width=W*dpr; cv.height=H*dpr;
+  const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,W,H);
+  const span=view1-view0, X=t=>(t-view0)/span*W;
+  const items=schedule.items;
+  const laneH=88, laneY=[18,120];
+  const zoomed = span < 30;      // 放大到 30s 以内才画击点/网格
+  const deep   = span < 8;       // 深度放大:画每一拍编号
+
+  g.font="9px monospace";
+  items.forEach((it,i)=>{
+    const y=laneY[i%2], t0=it.start, t1=it.start+it.dur;
+    if(t1<view0||t0>view1) return;
+    const x0=Math.max(X(t0),-50), x1=Math.min(X(t1),W+50), w=Math.max(2,x1-x0);
+    const mid=y+laneH/2;
+    // section 底色
+    const secs=it.track.sections;
+    if(secs){
+      const ratio=it.dur/it.track.dur;
+      /* 源时间 → 输出时间。预览模式下中间原速段被省略,源轴上存在"缺口";
+         落在缺口里的时刻必须贴到下一段起点,否则会被外推成负偏移 → section 色块错位、
+         标签互相重叠(1.61 实测:出现 "OUTBUILD"/"VENTRO" 这类叠字)。 */
+      const s2o=srcT=>{
+        const M=it.map;
+        if(!M||!M.length) return srcT*ratio;
+        for(const m of M){
+          if(srcT<=m.s0) return m.o0;                                        // 缺口 → 贴到下一段起点
+          if(srcT<=m.s1) return m.o0+(srcT-m.s0)/(m.s1-m.s0)*(m.o1-m.o0);
+        }
+        return M[M.length-1].o1;
+      };
+      secs.forEach(s=>{
+        const a=X(t0+s2o(s.s)), b=X(t0+s2o(s.e));
+        if(b<0||a>W||b-a<1.5) return;   // 被折叠进缺口的段落宽度≈0,跳过
+        g.fillStyle=SEC_COLORS[s.label]||"#555"; g.globalAlpha=0.20;
+        g.fillRect(a, y, Math.max(1,b-a), laneH);
+        g.globalAlpha=1;
+        if(b-a>44){ g.fillStyle=SEC_COLORS[s.label]||"#888"; g.globalAlpha=.85;
+          g.fillText(s.label, a+4, y+laneH-5); g.globalAlpha=1; }
+      });
+    }
+    g.strokeStyle="rgba(255,255,255,.10)"; g.lineWidth=1;
+    g.strokeRect(x0+.5, y+.5, w, laneH);
+    // 波形
+    const b=it.buf, sr=b.sampleRate, ch=b.getChannelData(0), gn=gainOf(it.track);
+    g.fillStyle=i%2? "rgba(255,45,149,.75)":"rgba(0,229,255,.75)";
+    const px0=Math.max(0,Math.floor(x0)), px1=Math.min(W,Math.ceil(x1));
+    for(let px=px0;px<px1;px++){
+      const ta=view0+(px/W)*span-it.start, tb=view0+((px+1)/W)*span-it.start;
+      let s0=Math.floor(ta*sr), s1=Math.floor(tb*sr);
+      if(s1<=0||s0>=b.length) continue;
+      s0=Math.max(0,s0); s1=Math.min(b.length,Math.max(s1,s0+1));
+      let mn=0,mx=0; const st=Math.max(1,Math.floor((s1-s0)/40));
+      for(let s=s0;s<s1;s+=st){ const v=ch[s]*gn; if(v<mn)mn=v; if(v>mx)mx=v; }
+      const yA=mid-Math.min(1,mx)*(laneH/2-12), yB=mid-Math.max(-1,mn)*(laneH/2-12);
+      g.fillRect(px, yA, 1, Math.max(1,yB-yA));
+    }
+    // 放大后:实测击点
+    if(zoomed){
+      const from=Math.max(0, view0-it.start), to=Math.min(it.dur, view1-it.start);
+      if(to>from){
+        const ons=transientsIn(b, from, to);
+        g.strokeStyle=i%2? "rgba(255,45,149,.95)":"rgba(0,229,255,.95)"; g.lineWidth=1.4;
+        ons.forEach(o=>{ const x=X(o.t+it.start); if(x<-2||x>W+2) return;
+          g.globalAlpha=.3+.7*o.v; g.beginPath(); g.moveTo(x,y+4); g.lineTo(x,y+laneH-4); g.stroke(); });
+        g.globalAlpha=1;
+      }
+    }
+    // 预览模式:标出被省略的中间段(源轴上的缺口),避免"只有一部分"看起来像 bug
+    if(it.map && it.map.length>1){
+      for(let k=0;k<it.map.length-1;k++){
+        const gap=it.map[k+1].s0-it.map[k].s1;
+        if(gap<1) continue;
+        const gx=X(t0+it.map[k].o1);
+        if(gx<-20||gx>W+20) continue;
+        g.strokeStyle="rgba(255,255,255,.45)"; g.lineWidth=1; g.setLineDash([3,3]);
+        g.beginPath(); g.moveTo(gx,y+2); g.lineTo(gx,y+laneH-2); g.stroke();
+        g.setLineDash([]);
+        const lbl="⋯ 省略 "+fmt(gap);
+        g.font="9px monospace";
+        const tw=g.measureText(lbl).width;
+        g.fillStyle="rgba(10,11,16,.85)"; g.fillRect(gx-tw/2-4, y+laneH/2-8, tw+8, 14);
+        g.fillStyle="rgba(255,255,255,.8)"; g.textAlign="center";
+        g.fillText(lbl, gx, y+laneH/2+3); g.textAlign="left";
+      }
+    }
+    // 曲名
+    if(w>60){
+      const meta=[String(i+1).padStart(2,"0"), it.track.name, it.track.key, it.track.bpm? it.track.bpm+"BPM":null].filter(Boolean).join(" · ");
+      g.fillStyle="rgba(255,255,255,.9)"; g.font="10px monospace";
+      g.save(); g.beginPath(); g.rect(Math.max(x0,0), y, Math.min(x1,W)-Math.max(x0,0), 16); g.clip();
+      g.fillText(meta, Math.max(x0,0)+5, y+12); g.restore();
+      g.font="9px monospace";
+    }
+  });
+  // 过渡区 + 过渡点
+  items.forEach((it,i)=>{
+    if(i>=items.length-1||!it.cfOut) return;
+    const nxt=items[i+1];
+    const a=it.start+it.foStart, b2=a+it.cfOut, s=nxt.start;
+    if(b2<view0||s>view1) return;
+    const xa=X(s), xb=X(b2);
+    const noMix=!(schedule.pairT&&schedule.pairT[i]!=null);
+    g.fillStyle=noMix? "rgba(255,45,149,.10)" : "rgba(255,176,32,.13)";
+    g.fillRect(xa,0,Math.max(1,xb-xa),H);
+    if(noMix && xb-xa>60){ g.fillStyle="#ff2d95"; g.font="10px monospace";
+      g.fillText("未 beatmatch · 纯淡化过渡", xa+6, 30); g.font="9px monospace"; }
+    g.strokeStyle="rgba(255,176,32,.75)"; g.lineWidth=1; g.setLineDash([4,3]);
+    [xa,xb].forEach(x=>{ g.beginPath(); g.moveTo(x,0); g.lineTo(x,H); g.stroke(); });
+    g.setLineDash([]);
+    // 对齐锚点(过渡点)
+    if(it.outAnchor!=null){
+      const x=X(it.start+it.outAnchor);
+      g.strokeStyle="#ffb020"; g.lineWidth=2;
+      g.beginPath(); g.moveTo(x,0); g.lineTo(x,H); g.stroke();
+      g.fillStyle="#ffb020"; g.font="9px monospace";
+      const ovlSec=(it.start+it.foStart+it.cfOut)-nxt.start;
+      const T2=schedule.pairT? schedule.pairT[i] : null;
+      const bars=T2? (ovlSec/(4*60/T2)).toFixed(1)+" 小节":"";
+      g.fillText(`▼ 过渡点 · overlap ${ovlSec.toFixed(1)}s${bars?" ≈ "+bars:""}`, x+4, H-6);
+    }
+    // 目标节拍网格
+    const T=schedule.pairT? schedule.pairT[i]:null;
+    if(zoomed && T && it.outAnchor!=null){
+      const beat=60/T, base=it.start+it.outAnchor;
+      const k0=Math.floor((view0-base)/beat), k1=Math.ceil((view1-base)/beat);
+      for(let k=k0;k<=k1;k++){
+        const x=X(base+k*beat); if(x<0||x>W) continue;
+        const isBar=((k%4)+4)%4===0;
+        g.strokeStyle=isBar?"rgba(255,255,255,.5)":"rgba(255,255,255,.14)";
+        g.lineWidth=isBar?1.1:1; g.setLineDash(isBar?[]:[2,5]);
+        g.beginPath(); g.moveTo(x,10); g.lineTo(x,H-14); g.stroke();
+        if(deep&&isBar){ g.setLineDash([]); g.fillStyle="rgba(255,255,255,.55)"; g.fillText(String(k/4), x+3, 9); }
+      }
+      g.setLineDash([]);
+    }
+  });
+  $("insSpan").textContent = span>=schedule.total-0.01? "全曲" : span.toFixed(span<2?2:1)+"s";
+  drawTimelineDiag();
+}
+function renderTimeline(){
+  $("tTotal").textContent = fmt(schedule.total);
+  $("deck").style.display="block";
+  updateSteps();
+  setupTransitionSelect();
+  viewFit();
+  $("deck").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+/* ---------- 播放引擎 ---------- */
+function curve(n, fn){ const a=new Float32Array(n); for(let i=0;i<n;i++) a[i]=fn(i/(n-1)); return a; }
+const FADE_IN  = curve(65, x=>Math.sin(x*Math.PI/2));   // equal-power
+const FADE_OUT = curve(65, x=>Math.cos(x*Math.PI/2));
+
+let seekOff = 0;
+function applyEnv(p, it, g0){
+  // 全局时间轴上的包络区间(淡出窗口在 foStart 处,可早于音频末尾;之后保持静音)
+  const aIn=it.start, bIn=it.start+it.cfIn, aOut=it.start+it.foStart, bOut=aOut+it.cfOut;
+  if(it.cfOut>0 && g0>=bOut){ p.setValueAtTime(0, t0); return; } // 已过淡出终点:整段静音
+  const toCtx = gt => t0 + (gt - g0);
+  if(it.cfIn>0 && g0 < bIn){
+    if(g0 <= aIn){ p.setValueAtTime(0, t0); p.setValueCurveAtTime(FADE_IN, toCtx(aIn), it.cfIn); }
+    else { // 从淡入中途切入:先设当前值再线性补完
+      p.setValueAtTime(Math.sin((g0-aIn)/it.cfIn*Math.PI/2), t0);
+      p.linearRampToValueAtTime(1, toCtx(bIn));
+    }
+  } else p.setValueAtTime(1, t0);
+  if(it.cfOut>0){
+    if(g0 <= aOut) p.setValueCurveAtTime(FADE_OUT, toCtx(aOut), it.cfOut);
+    else if(g0 < bOut){
+      p.setValueAtTime(Math.cos((g0-aOut)/it.cfOut*Math.PI/2), t0);
+      p.linearRampToValueAtTime(0, toCtx(bOut));
+    }
+  }
+}
+function startSet(seekTo=0){
+  stopSet(); stopPreview(); ensureCtx(); ctx.resume();
+  master=ctx.createGain(); analyser=ctx.createAnalyser(); analyser.fftSize=64;
+  /* 主输出限幅器:同奏叠加或 kick 精确重合时兜底,防止超 ±1.0 硬削波(爆音)。
+     注:节拍对齐越准,两轨 kick 越精确同相叠加,越需要这道保护。 */
+  const lim=makeLimiter(ctx);
+  master.connect(lim.input); lim.output.connect(analyser); analyser.connect(ctx.destination);
+  t0 = ctx.currentTime + 0.15;
+  seekOff = Math.min(Math.max(seekTo,0), Math.max(schedule.total-0.1,0));
+  const items=schedule.items;
+  items.forEach((it,i)=>{
+    if(it.start+it.dur <= seekOff+0.01 && i<items.length-1) return; // 已完全播过的曲目跳过
+    const src=ctx.createBufferSource(); src.buffer=it.buf;
+    const trim=ctx.createGain(); trim.gain.value=gainOf(it.track); // 整体响度均衡
+    const eq=makeBandEQ(ctx, bandCorrection(it.track));            // 分频段均衡
+    const bs=ctx.createBiquadFilter(); bs.type="lowshelf"; bs.frequency.value=BASS_FREQ;
+    applyBassEnv(bs.gain, it, seekOff, t0, schedule.pairT? (schedule.pairT[i]||schedule.pairT[i-1]) : null);
+    const g=ctx.createGain(); src.connect(trim); trim.connect(eq.input); eq.output.connect(bs); bs.connect(g); g.connect(master);
+    applyEnv(g.gain, it, seekOff);
+    const rel = it.start - seekOff;
+    src.start(t0+Math.max(rel,0), Math.max(-rel,0));
+    if(i===items.length-1) src.onended = ()=>{ if(playing) stopSet(); };
+    sources.push(src);
+  });
+  playing=true; $("playBtn").textContent="⏸";
+  raf=requestAnimationFrame(tick);
+}
+/* 时间轴 hover 定位 + 点击跳转 */
+const tlEl=$("timeline");
+tlEl.addEventListener("mousemove", e=>{
+  if(!schedule) return;
+  const r=tlEl.getBoundingClientRect(), x=Math.min(Math.max(e.clientX-r.left,0),r.width);
+  $("tlcur").style.display="block"; $("tlcur").style.left=x+"px";
+  $("tltime").style.display="block"; $("tltime").style.left=x+"px";
+  $("tltime").textContent=fmt(view0+(x/r.width)*(view1-view0));
+});
+tlEl.addEventListener("mouseleave", ()=>{ $("tlcur").style.display="none"; $("tltime").style.display="none"; });
+(function(){ // 区分点击跳转与拖动平移
+  let dx=0, sx=0;
+  tlEl.addEventListener("mousedown", e=>{ sx=e.clientX; dx=0; });
+  tlEl.addEventListener("mousemove", e=>{ if(e.buttons&1) dx=Math.max(dx,Math.abs(e.clientX-sx)); });
+  tlEl.addEventListener("click", e=>{
+    if(!schedule||dx>4) return;
+    const r=tlEl.getBoundingClientRect(), frac=Math.min(Math.max((e.clientX-r.left)/r.width,0),1);
+    startSet(view0+frac*(view1-view0));
+  });
+})();
+function stopSet(){
+  sources.forEach(s=>{ s.onended=null; try{s.stop()}catch(e){} });
+  sources=[]; playing=false; cancelAnimationFrame(raf);
+  if(master){ try{master.disconnect()}catch(e){} master=null; }
+  if(ctx && ctx.state==="suspended") ctx.resume();
+  $("playBtn").textContent="▶"; $("status").textContent="IDLE"; $("status").classList.remove("transition");
+  $("nowTitle").textContent="—"; $("playhead").style.left="0";
+  document.querySelectorAll(".track.playing-now").forEach(n=>n.classList.remove("playing-now"));
+  clearSpectrum();
+}
+$("stopBtn").addEventListener("click", stopSet);
+$("playBtn").addEventListener("click", ()=>{
+  if(!playing){ if(schedule) startSet(); return; }
+  if(ctx.state==="running"){ ctx.suspend(); $("playBtn").textContent="▶"; $("status").textContent="PAUSED"; }
+  else { ctx.resume(); $("playBtn").textContent="⏸"; }
+});
+
+function tick(){
+  if(!playing) return;
+  const el = Math.min(Math.max(ctx.currentTime - t0 + seekOff, 0), schedule.total);
+  { const f=(el-view0)/(view1-view0);
+    const ph=$("playhead");
+    if(f<-0.02||f>1.02) ph.style.display="none";
+    else { ph.style.display="block"; ph.style.left=(f*100)+"%"; } }
+  $("tCur").textContent = fmt(el);
+  const items=schedule.items;
+  let cur=-1;
+  for(let i=0;i<items.length;i++) if(el>=items[i].start && el<items[i].start+items[i].dur) cur=i;
+  if(cur>=0){
+    const it=items[cur], prev=items[cur-1];
+    const inTransition = prev && el < prev.start + prev.foStart + prev.cfOut; // 上一首仍在淡出
+    if(ctx.state==="running"){
+      const st=$("status");
+      st.textContent = inTransition? "TRANSITION "+cur+" → "+(cur+1) : "PLAYING · TRACK "+(cur+1);
+      st.classList.toggle("transition", !!inTransition);
+    }
+    $("nowTitle").textContent = inTransition? prev.track.name+"  ⇄  "+it.track.name : it.track.name;
+    document.querySelectorAll("#list .track").forEach((b,i)=>b.classList.toggle("playing-now", i===cur));
+  }
+  drawSpectrum();
+  raf=requestAnimationFrame(tick);
+}
+
+/* ---------- 导出完整音频文件 (WAV) ---------- */
+$("expBtn").addEventListener("click", async ()=>{
+  if(!schedule) return;
+  const btn=$("expBtn"); btn.disabled=true; btn.textContent="⏳ 渲染完整 SET…";
+  try{
+    /* 预览用的是「只含过渡区」的精简音轨(省内存),导出必须重新构建完整版:
+       full=true 会把中间原速段一并拼回,得到从头到尾的完整 set。
+       渲染完成后立即释放这些全长副本,避免常驻内存。 */
+    await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+    const fullSch = await buildSchedule((i,n)=>{ btn.textContent=`⏳ 渲染完整 SET ${i+1}/${n}…`; }, true);
+    const sr=44100, oc=new OfflineAudioContext(2, Math.ceil(fullSch.total*sr), sr);
+    const expLim=makeLimiter(oc); expLim.output.connect(oc.destination);  // 导出同样限幅
+    fullSch.items.forEach((it,i)=>{
+      const src=oc.createBufferSource(); src.buffer=it.buf;
+      const trim=oc.createGain(); trim.gain.value=gainOf(it.track);
+      const eq=makeBandEQ(oc, bandCorrection(it.track));
+      const bs=oc.createBiquadFilter(); bs.type="lowshelf"; bs.frequency.value=BASS_FREQ;
+      applyBassEnv(bs.gain, it, 0, 0, fullSch.pairT? (fullSch.pairT[i]||fullSch.pairT[i-1]) : null);
+      const g=oc.createGain(); src.connect(trim); trim.connect(eq.input); eq.output.connect(bs); bs.connect(g); g.connect(expLim.input);
+      if(it.cfIn>0){ g.gain.setValueAtTime(0,0); g.gain.setValueCurveAtTime(FADE_IN, it.start, it.cfIn); }
+      else g.gain.setValueAtTime(1,0);
+      if(it.cfOut>0) g.gain.setValueCurveAtTime(FADE_OUT, it.start+it.foStart, it.cfOut);
+      src.start(it.start);
+    });
+    btn.textContent="⏳ 混音中…";
+    const rendered = await oc.startRendering();
+    // 释放导出用的全长副本(每首 ~127MB),只保留预览用的精简版
+    for(const t of tracks){ if(!t._proc) continue;
+      for(const k of Object.keys(t._proc)) if(k.endsWith("|F")) delete t._proc[k]; }
+    fullSch.items.forEach(it=>{ it.buf=null; });
+    btn.textContent="⏳ 编码 WAV…";
+    await new Promise(r=>setTimeout(r,0));
+    const blob = encodeWAV(rendered);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="mixflow-dj-set.wav";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    btn.textContent="✓ SAVED · EXPORT AGAIN";
+  }catch(err){
+    console.error(err); btn.textContent="EXPORT FAILED — RETRY";
+  }
+  btn.disabled=false;
+});
+function encodeWAV(buf){
+  const nCh=2, sr=buf.sampleRate, n=buf.length;
+  const bytes = 44 + n*nCh*2;
+  const ab=new ArrayBuffer(bytes), v=new DataView(ab);
+  const wstr=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  wstr(0,"RIFF"); v.setUint32(4, bytes-8, true); wstr(8,"WAVE");
+  wstr(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,nCh,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*nCh*2,true); v.setUint16(32,nCh*2,true); v.setUint16(34,16,true);
+  wstr(36,"data"); v.setUint32(40, n*nCh*2, true);
+  const L=buf.getChannelData(0), R=buf.numberOfChannels>1? buf.getChannelData(1):L;
+  let o=44;
+  for(let i=0;i<n;i++){
+    let s=Math.max(-1,Math.min(1,L[i])); v.setInt16(o, s<0? s*0x8000 : s*0x7FFF, true); o+=2;
+    s=Math.max(-1,Math.min(1,R[i]));     v.setInt16(o, s<0? s*0x8000 : s*0x7FFF, true); o+=2;
+  }
+  return new Blob([ab], {type:"audio/wav"});
+}
+
+/* ---------- 时间轴缩放 / 诊断 ---------- */
+let insIdx=0;
+function transientsIn(buf, from, to){
+  const sr=buf.sampleRate, ch=buf.getChannelData(0), hop=128;
+  const i0=Math.max(0,Math.floor(from*sr)), i1=Math.min(buf.length,Math.floor(to*sr));
+  const n=Math.floor((i1-i0)/hop); if(n<4) return [];
+  const env=new Float32Array(n); let prev=0;
+  for(let k=0;k<n;k++){
+    const s=i0+k*hop; let e=0;
+    for(let j=0;j<hop;j+=2){ const v=ch[s+j]; e+=v*v; }
+    e=Math.sqrt(e); env[k]=Math.max(0,e-prev); prev=e;
+  }
+  let mx=0; for(let i=0;i<n;i++) if(env[i]>mx) mx=env[i];
+  if(mx<=0) return [];
+  const out=[], minGap=Math.round(0.08*sr/hop); let last=-1e9;
+  for(let k=1;k<n-1;k++){
+    if(env[k]<mx*0.28) continue;
+    if(env[k]<env[k-1]||env[k]<env[k+1]) continue;
+    if(k-last<minGap) continue;
+    last=k; out.push({t:from+k*hop/sr, v:env[k]/mx});
+  }
+  return out;
+}
+/* 诊断栏:当前视窗中心所在的过渡 */
+function drawTimelineDiag(){
+  const dv=$("insDiag"); if(!schedule){ dv.innerHTML=""; return; }
+  const items=schedule.items;
+  if(items.length<2){ dv.innerHTML=""; return; }
+  const i=Math.min(insIdx, items.length-2), cur=items[i], nxt=items[i+1];
+  const bs=(cur.beatSync&&nxt.beatSync);
+  const bsTag=bs? `<span class="ok">◆ 逐拍同步(Essentia 网格,每拍钉死)</span>\n`
+                : `<span class="warn">◇ 未使用逐拍同步(无 Essentia 网格,走匀速拉伸)</span>\n`;
+  const secAt=(it,gt)=>{ const s=it.track.sections; if(!s) return "?";
+    const r=(gt-it.start)/it.dur*it.track.dur;
+    const f=s.find(x=>r>=x.s&&r<x.e); return f? f.label:"?"; };
+  const d=nxt.diag, l=[];
+  const ovl=(cur.start+cur.foStart+cur.cfOut)-nxt.start;
+  const tp=cur.start+(cur.outAnchor!=null? cur.outAnchor:cur.foStart);
+  l.push(`过渡 ${i+1}→${i+2} @ ${fmt(tp)} · 重叠 ${ovl.toFixed(1)}s · ` +
+    `出歌此处 <b style="color:${SEC_COLORS[secAt(cur,tp)]||'#888'}">${secAt(cur,tp)}</b> → ` +
+    `入歌此处 <b style="color:${SEC_COLORS[secAt(nxt,tp)]||'#888'}">${secAt(nxt,tp)}</b>`);
+  if(d){
+    const f=v=>v==null? "测不到":v.toFixed(3)+"BPM";
+    l.push(`目标 ${d.T}BPM · 渲染后实测 出${f(d.out)} 入${f(d.in)}`);
+    if(d.drift!=null){
+      const beats=Math.abs(d.drift)*ovl/(60/d.T);
+      const cls=Math.abs(d.drift)<0.0005?"ok":(Math.abs(d.drift)<0.002?"warn":"bad");
+      l.push(`速率差 <span class="${cls}">${(d.drift*100).toFixed(3)}%</span> → 重叠期累计 <span class="${cls}">${beats.toFixed(3)} 拍</span>${beats>0.1?' <span class="bad">(可听出)</span>':' <span class="ok">(听不出)</span>'}`);
+    }
+  }else l.push(`<span class="warn">该过渡未做 BPM 对齐(BPM 未检出或退回备用过渡)</span>`);
+  dv.innerHTML=bsTag+l.join("\n");
+}
+function setupTransitionSelect(){
+  const sel=$("insSel"); sel.innerHTML="";
+  if(!schedule) return;
+  schedule.items.slice(0,-1).forEach((it,i)=>{
+    const o=document.createElement("option"); o.value=i;
+    o.textContent=`过渡 ${i+1}→${i+2}:${it.track.name.slice(0,12)} ⇄ ${schedule.items[i+1].track.name.slice(0,12)}`;
+    sel.appendChild(o);
+  });
+  insIdx=Math.min(insIdx, Math.max(0,schedule.items.length-2));
+  sel.value=insIdx;
+}
+function gotoTransition(){
+  if(!schedule) return;
+  const it=schedule.items[insIdx];
+  const c=it.start+(it.outAnchor!=null? it.outAnchor:it.foStart);
+  const span=Math.min(6, schedule.total);
+  view0=Math.max(0,c-span/2); view1=view0+span;
+  drawTimeline();
+}
+function zoomTL(f, anchorFrac){
+  if(!schedule) return;
+  const span=view1-view0, at=view0+(anchorFrac==null?0.5:anchorFrac)*span;
+  let ns=Math.min(schedule.total, Math.max(0.3, span*f));
+  view0=at-(anchorFrac==null?0.5:anchorFrac)*ns; view1=view0+ns;
+  if(view0<0){ view1-=view0; view0=0; }
+  if(view1>schedule.total){ view0-=(view1-schedule.total); view1=schedule.total; view0=Math.max(0,view0); }
+  drawTimeline();
+}
+$("insSel").addEventListener("change", e=>{ insIdx=+e.target.value; drawTimelineDiag(); });
+$("insGo").addEventListener("click", gotoTransition);
+$("insFit").addEventListener("click", viewFit);
+$("insZoomIn").addEventListener("click", ()=>zoomTL(1/1.6));
+$("insZoomOut").addEventListener("click", ()=>zoomTL(1.6));
+$("timeline").addEventListener("wheel", e=>{
+  if(!schedule) return;
+  e.preventDefault();
+  const r=$("timeline").getBoundingClientRect();
+  zoomTL(e.deltaY>0? 1.25:0.8, (e.clientX-r.left)/r.width);
+},{passive:false});
+(function(){
+  let drag=false, lastX=0;
+  const tl=$("timeline");
+  tl.addEventListener("mousedown", e=>{ drag=true; lastX=e.clientX; });
+  window.addEventListener("mouseup", ()=>drag=false);
+  window.addEventListener("mousemove", e=>{
+    if(!drag||!schedule) return;
+    const r=tl.getBoundingClientRect(), span=view1-view0;
+    let d=-(e.clientX-lastX)/r.width*span; lastX=e.clientX;
+    view0+=d; view1+=d;
+    if(view0<0){ view1-=view0; view0=0; }
+    if(view1>schedule.total){ view0-=(view1-schedule.total); view1=schedule.total; }
+    drawTimeline();
+  });
+})();
+window.addEventListener("resize", ()=>{ if(schedule) drawTimeline(); });
+
+/* ---------- 频谱 ---------- */
+const spCv=$("spectrum"), spG=spCv.getContext("2d");
+function drawSpectrum(){
+  if(!analyser) return;
+  const data=new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  spG.clearRect(0,0,180,36);
+  const n=24, bw=180/n;
+  for(let i=0;i<n;i++){
+    const v=data[i]/255*34;
+    const grad=spG.createLinearGradient(0,36,0,0);
+    grad.addColorStop(0,"#00e5ff"); grad.addColorStop(1,"#ff2d95");
+    spG.fillStyle=grad; spG.fillRect(i*bw, 36-v, bw-2, v);
+  }
+}
+function clearSpectrum(){ spG.clearRect(0,0,180,36); }
+/* section 图例 */
+Object.entries(SEC_COLORS).forEach(([k,c])=>{
+  const d=document.createElement("span");
+  const dot=document.createElement("i"); dot.style.background=c;
+  d.appendChild(dot); d.append(k);
+  $("secLegend").appendChild(d);
+});
+renderList();
+</script>
+</body>
+</html>
