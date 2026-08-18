@@ -22,6 +22,18 @@ function ensureSetting(id){
 }
 const $ = id => document.getElementById(id) || ensureSetting(id);
 
+/* 引擎里有两个函数是当年写在「UI 层」的,但引擎自己会调用它们 ——
+   3.0 拆包时我只搬了引擎那一段,漏掉这两个,导致 buildSchedule 最后一行
+   ReferenceError,表现成「Something went wrong while blending」。
+   currentMeta:buildSchedule 用它给排程结果盖一个参数快照。
+   renderList :analyzeTrack 结束时的老回调,新架构里 UI 由 React 自己重绘,置空即可。 */
+function currentMeta(){
+  return { ovl:$("ovlSel").value, bassSwap:$("bassSwap").checked, align:$("tempoAlign").checked,
+           norm:$("normalize").checked, mode:$("mixMode").value,
+           ids:tracks.map(t=>t.id), bpms:tracks.map(t=>t.bpm) };
+}
+function renderList(){ /* React 负责渲染,这里不需要做任何事 */ }
+
 let ctx=null;
 let tracks=[];
 let schedule=null;
@@ -2125,13 +2137,24 @@ const MF={
           : "one of these two doesn't hold a steady pulse";
         return {warn:true, text:`No beat-match here — ${why}. MIXFLOW fades one into the other instead.`};
       }
-      const bars=info.bars||0, secs=bars*4*60/T;
+      /* 说明必须报【实际】overlap,不是【请求】的小节数。
+         schedulePair 会把 overlap 压到两侧素材允许的范围内:出歌的 outro 只有 5.8s 时,
+         请求 8 小节(15s)实际只混得到 3.8s。以前这里读 info.bars(请求值),
+         于是界面上写着「8 bars / 15 seconds」而耳朵听到的是 4 秒 —— 是在骗人。 */
+      const barT=4*60/T;
+      /* 两轨同时在响的那段才算 overlap:出歌的淡出长度与入歌的淡入长度取小 */
+      const ovlSec=Math.min(it.cfOut||0, nx.cfIn||0);
+      const secs=ovlSec>0? ovlSec : (info.bars||0)*barT;
+      const bars=Math.max(1, Math.round(secs/barT));
+      const want=info.bars||0;
+      const squeezed = want>0 && secs < want*barT*0.85;
       const keyOK=a.key&&b.key&&camelotCompatible(a.key,b.key);
       return {warn:false,
-        text:`Blends for ${bars} bars — about ${Math.round(secs)} seconds, both nudged to ${Math.round(T)} BPM.`,
+        text:`Blends for ${bars} ${bars===1?'bar':'bars'} — about ${Math.round(secs)} seconds, both nudged to ${Math.round(T)} BPM.`,
         detail:`${Math.round(a.bpm)} → ${Math.round(T)}, ${Math.round(b.bpm)} → ${Math.round(T)}. `+
                (keyOK? `Keys ${a.key} and ${b.key} sit together, so they can overlap at full volume.`
-                     : `Keys ${a.key||"?"} and ${b.key||"?"} clash a little, so the bass hands over early.`)};
+                     : `Keys ${a.key||"?"} and ${b.key||"?"} clash a little, so the bass hands over early.`)
+               + (squeezed? ` Shorter than the ${want} bars asked for — “${a.name}” doesn't leave enough clean outro.` : ``)};
     });
   },
 
