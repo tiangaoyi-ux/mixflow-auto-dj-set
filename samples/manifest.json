@@ -1,0 +1,69 @@
+{
+ "note": "MIXFLOW sample pack",
+ "tracks": [
+  {
+   "file": "01.m4a",
+   "name": "Temptation (Mathimidori Remix) — Release",
+   "bpm": 121.6,
+   "key": "6B",
+   "dur": 94.737,
+   "bars": 48
+  },
+  {
+   "file": "02.m4a",
+   "name": "Are You Listening — Pancratio",
+   "bpm": 127.6,
+   "key": "1A",
+   "dur": 90.282,
+   "bars": 48
+  },
+  {
+   "file": "03.m4a",
+   "name": "The Key (Wubbledub Edit) — Space Bunny",
+   "bpm": 130.8,
+   "key": "12A",
+   "dur": 88.073,
+   "bars": 48
+  },
+  {
+   "file": "04.m4a",
+   "name": "Trippin — Palorim",
+   "bpm": 127.6,
+   "key": "2A",
+   "dur": 90.282,
+   "bars": 48
+  },
+  {
+   "file": "05.m4a",
+   "name": "War Of The Godz — Gabriel Belabbas & Poggio",
+   "bpm": 127.7,
+   "key": "9A",
+   "dur": 90.211,
+   "bars": 48
+  },
+  {
+   "file": "06.m4a",
+   "name": "Carregada Calibrada",
+   "bpm": 136.9,
+   "key": "11A",
+   "dur": 84.149,
+   "bars": 48
+  },
+  {
+   "file": "07.m4a",
+   "name": "Digital Vintage",
+   "bpm": 130.0,
+   "key": "9A",
+   "dur": 88.615,
+   "bars": 48
+  },
+  {
+   "file": "08.m4a",
+   "name": "Release Me",
+   "bpm": 130.0,
+   "key": "3A",
+   "dur": 88.615,
+   "bars": 48
+  }
+ ]
+}
