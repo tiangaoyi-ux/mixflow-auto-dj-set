@@ -2199,11 +2199,17 @@ const MF={
     return kind==="txt"? "1 KB" : Math.round(schedule.total*44100*4/1048576)+" MB"; },
 
   /* —— 设备能力 —— */
+  /* renderVals 每次渲染都会调它。这里任何一个异常都会把整个 UI 打挂,
+     所以每一项都做存在性判断,并整体兜一层 try。 */
   isMobile(){
-    const touch = matchMedia("(pointer:coarse)").matches;
-    const small = Math.min(innerWidth, innerHeight) < 700;
-    const mem = navigator.deviceMemory;
-    return (touch && small) || (mem!=null && mem<=4);
+    try{
+      const touch = typeof matchMedia==="function" && matchMedia("(pointer:coarse)").matches;
+      const w = typeof innerWidth==="number"? innerWidth : 1440;
+      const h = typeof innerHeight==="number"? innerHeight : 900;
+      const small = Math.min(w,h) < 700;
+      const mem = (typeof navigator!=="undefined" && navigator) ? navigator.deviceMemory : null;
+      return (touch && small) || (mem!=null && mem<=4);
+    }catch(e){ return false; }
   },
   fmt:fmtT
 };
